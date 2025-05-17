@@ -3,71 +3,124 @@
 /* Or remove if not using: npm uninstall tailwindcss-custom-variants */
 /* @custom-variant dark (&:is(.dark *)); */
 
-@theme inline {
-  /* Make CSS variables available to Tailwind's theme() and JIT engine */
-  --accent-color: var(--accent-color-val);
-  --background-color: var(--background-color-val);
-  --widget-background: var(--widget-background-val);
-  --text-color: var(--text-color-val);
-  --text-muted-color: var(--text-muted-color-val);
-  --border-color: var(--border-color-val);
-  --input-bg: var(--input-bg-val);
-  --danger-color: var(--danger-color-val);
+/*
+  Link to Tailwind config if explicitly needed with Tailwind CSS v4+.
+  However, for dynamic CSS variable changes via JS, this might not be strictly
+  necessary for the color variables themselves, but good for other configs like fonts.
+  The `postcss.config.mjs` already includes `@tailwindcss/postcss`.
+*/
+/* @config "./tailwind.config.ts"; */
 
+
+@theme {
+  /* Make CSS variables available to Tailwind's theme() and JIT engine */
+  /* These are the *keys* Tailwind will recognize. Their *values* will be set by :root or ThemeProvider. */
+  
   /* Shadcn/ui compatibility - map our theme to shadcn's expected vars */
-  --background: var(--background-color-val); /* For shadcn body bg */
-  --foreground: var(--text-color-val);     /* For shadcn body text */
-  --card: var(--widget-background-val);       /* For shadcn Card component bg */
-  --card-foreground: var(--text-color-val);   /* For shadcn Card component text */
-  --popover: var(--widget-background-val);    /* For shadcn Popover component bg */
-  --popover-foreground: var(--text-color-val);/* For shadcn Popover component text */
-  --primary: var(--accent-color-val);         /* For shadcn primary elements */
-  --primary-foreground: var(--background-color-val); /* Text on primary elements */
-  --secondary: var(--input-bg-val);           /* A secondary background */
-  --secondary-foreground: var(--text-color-val); /* Text on secondary */
-  --muted: var(--input-bg-val);               /* Muted background */
-  --muted-foreground: var(--text-muted-color-val); /* Muted text */
-  --accent: hsl(var(--accent-color-hsl) / 0.1); /* Accent bg (e.g., hover), derived from accent-color */
+  /* These act as aliases. The ThemeProvider sets the --*-val variables. */
+  --background: var(--background-color-val);
+  --foreground: var(--text-color-val);
+  --card: var(--widget-background-val);
+  --card-foreground: var(--text-color-val);
+  --popover: var(--widget-background-val);
+  --popover-foreground: var(--text-color-val);
+  --primary: var(--accent-color-val);
+  --primary-foreground: var(--background-color-val); /* Default, can be overridden by theme */
+  --secondary: var(--input-bg-val);
+  --secondary-foreground: var(--text-color-val);
+  --muted: var(--input-bg-val);
+  --muted-foreground: var(--text-muted-color-val);
+  --accent: hsl(var(--accent-color-hsl) / 0.1);
+  --accent-foreground: var(--accent-color-val);
+  --destructive: var(--danger-color-val);
+  --destructive-foreground: var(--text-color-val);
+  --border: var(--border-color-val);
+  --input: var(--border-color-val);
+  --ring: hsl(var(--accent-color-hsl) / 0.5);
+
+  --radius: 0.75rem;
+
+  /* Fonts - --font-selected-app will be set by ThemeProvider */
+  --font-sans: var(--font-selected-app), var(--font-inter); /* Fallback to Inter */
+  --font-orbitron: var(--font-orbitron-val);
+  /* Individual font variables are also available directly */
+  --font-inter: Inter, sans-serif; /* Define actual font stack for fallback */
+  --font-geist-sans: GeistSans, sans-serif;
+  --font-manrope: Manrope, sans-serif;
+  --font-lexend: Lexend, sans-serif;
+  --font-poppins: Poppins, sans-serif;
+  --font-jetbrains-mono: 'JetBrains Mono', monospace;
+  --font-lora: Lora, serif;
+
+
+  /* AYANDA specific variables - these are the source of truth set by ThemeProvider */
+  /* Their default values are in :root */
+  --accent-color-val: #00DCFF;
+  --accent-color-hsl: 190 100% 50%;
+  --background-color-val: #0A0F14;
+  --widget-background-val: #101820;
+  --text-color-val: #E0E7FF;
+  --text-muted-color-val: #707A8A;
+  --border-color-val: rgba(0, 220, 255, 0.08);
+  --input-bg-val: rgba(255, 255, 255, 0.03);
+  --danger-color-val: #FF4757;
+}
+
+/* Default values set on :root, ThemeProvider will override these dynamically */
+:root {
+  /* AYANDA specific variables */
+  --accent-color-val: #00DCFF;
+  --accent-color-hsl: 190 100% 50%; /* HSL for #00DCFF */
+  --background-color-val: #0A0F14;
+  --widget-background-val: #101820;
+  --text-color-val: #E0E7FF;
+  --text-muted-color-val: #707A8A;
+  --border-color-val: rgba(0, 220, 255, 0.08);
+  --input-bg-val: rgba(255, 255, 255, 0.03);
+  --danger-color-val: #FF4757;
+
+  /* Shadcn variables derived from AYANDA vars - these are effectively aliases */
+  /* These are defined here for initial render / no-JS fallback */
+  --background: var(--background-color-val);
+  --foreground: var(--text-color-val);
+  --card: var(--widget-background-val);
+  --card-foreground: var(--text-color-val);
+  --popover: var(--widget-background-val);
+  --popover-foreground: var(--text-color-val);
+  --primary: var(--accent-color-val);
+  --primary-foreground: var(--background-color-val); /* Text on primary elements, default dark on light accent */
+  --secondary: var(--input-bg-val);
+  --secondary-foreground: var(--text-color-val);
+  --muted: var(--input-bg-val);
+  --muted-foreground: var(--text-muted-color-val);
+  --accent: hsl(var(--accent-color-hsl) / 0.1); /* Accent bg (e.g., hover) */
   --accent-foreground: var(--accent-color-val);  /* Text on accent bg */
   --destructive: var(--danger-color-val);
   --destructive-foreground: var(--text-color-val);
-  --border: var(--border-color-val);          /* For shadcn borders */
-  --input: var(--border-color-val);           /* For shadcn input borders */
-  --ring: hsl(var(--accent-color-hsl) / 0.5); /* Focus ring, derived */
+  --border: var(--border-color-val);
+  --input: var(--border-color-val);
+  --ring: hsl(var(--accent-color-hsl) / 0.5); /* Focus ring */
+  --radius: 0.75rem;
 
-  --radius: 0.75rem; /* Default border radius for shadcn components */
-
-  /* Fonts */
-  --font-sans: var(--font-inter);
-  --font-orbitron: var(--font-orbitron-val);
-  --font-inter: 'Inter', sans-serif;
-  --font-orbitron-val: 'Orbitron', sans-serif;
+  /* Font variable that ThemeProvider will update */
+  --font-selected-app: var(--font-inter); /* Default selected font */
 }
 
-:root {
-    --accent-color-val: #00DCFF; /* Vivid Cyan */
-    --accent-color-hsl: 190 100% 50%; /* HSL for opacity variants, approx #00DCFF */
-    --background-color-val: #0A0F14; /* Very Dark Blue/Gray */
-    --widget-background-val: #101820; /* Darker than accent, lighter than bg */
-    --text-color-val: #E0E7FF; /* Soft Lavender White */
-    --text-muted-color-val: #707A8A; /* Muted Blue/Gray */
-    --border-color-val: rgba(0, 220, 255, 0.08); /* Softer border */
-    --input-bg-val: rgba(255, 255, 255, 0.03);
-    --danger-color-val: #FF4757;
+.dark:root {
+  /* Default dark theme values (can be overridden by ThemeProvider) */
+  /* Example: if you want specific dark mode overrides not handled by theme objects */
 }
+
 
 @layer base {
   body {
-    font-family: var(--font-inter);
-    background-color: var(--background-color-val);
-    color: var(--text-color-val);
+    font-family: theme('fontFamily.sans'); /* Uses the dynamically set --font-selected-app */
+    background-color: var(--background-color-val); /* Fallback, JS will set --background */
+    color: var(--text-color-val); /* Fallback, JS will set --foreground */
     overflow-x: hidden;
-    /* padding-top: is handled by main layout component now */
   }
   * {
-    /* Apply border-color by default using Tailwind's border class + CSS var */
-    /* This is more for shadcn components that expect --border */
-     border-color: var(--border-color-val);
+     border-color: var(--border); /* For shadcn components that expect --border */
   }
   /* Custom scrollbar for webkit browsers */
   ::-webkit-scrollbar {
@@ -78,18 +131,17 @@
     background: rgba(255,255,255,0.02);
   }
   ::-webkit-scrollbar-thumb {
-    background: rgba(0, 220, 255, 0.2);
+    background: hsl(var(--accent-color-hsl) / 0.3); /* Use HSL for consistency */
     border-radius: 2px;
   }
   /* For Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: rgba(0, 220, 255, 0.2) rgba(255,255,255,0.02);
+    scrollbar-color: hsl(var(--accent-color-hsl) / 0.3) rgba(255,255,255,0.02);
   }
 }
 
 @layer components {
-  /* Replicating styles from provided HTML for direct use if needed, or as reference for Tailwind classes */
   .widget-item {
     background-color: var(--input-bg-val);
     padding: 0.625rem 0.875rem; /* 10px 14px */
@@ -102,12 +154,29 @@
     word-break: break-word;
   }
   .widget-item:hover {
-    border-left-color: var(--accent-color-val);
-    background-color: rgba(0, 220, 255, 0.05);
+    border-left-color: var(--accent-color-val); /* Use themed accent */
+    background-color: hsl(var(--accent-color-hsl) / 0.05); /* Use themed accent with low opacity */
+  }
+
+  /* General input field styling to match dashboard look */
+  .input-field {
+    @apply bg-[var(--input-bg-val)] border-[var(--border-color-val)] text-[var(--text-color-val)] placeholder:text-[var(--text-muted-color-val)];
+    @apply focus:border-[var(--accent-color-val)] focus:ring-1 focus:ring-[var(--accent-color-val)]/50;
+  }
+  
+  /* Button primary style consistent with theme */
+  .btn-primary {
+    @apply bg-[var(--accent-color-val)] text-[var(--primary-foreground)] hover:opacity-90;
+  }
+  .btn-icon {
+    @apply text-[var(--text-muted-color-val)] hover:text-[var(--accent-color-val)];
+  }
+  .btn-icon.danger {
+     @apply hover:text-[var(--danger-color-val)];
   }
 }
 
 @layer utilities {
-    .font-orbitron { font-family: var(--font-orbitron-val); }
+    .font-orbitron { font-family: theme('fontFamily.orbitron'); }
     .accent-text { color: var(--accent-color-val); }
 }

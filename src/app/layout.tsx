@@ -1,21 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, Orbitron } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
-import AuthSessionProvider from "@/components/auth/AuthSessionProvider"; // Import the provider
-
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-  display: 'swap',
-});
-
-const orbitronFont = Orbitron({ // Renamed to avoid conflict with Orbitron type
-  subsets: ["latin"],
-  variable: "--font-orbitron-val",
-  weight: ["500", "700"],
-  display: 'swap',
-});
+import AuthSessionProvider from "@/components/auth/AuthSessionProvider";
+import { ThemeProvider, FOUTPreventionScript } from "@/context/ThemeContext";
+import {
+  inter,
+  orbitronFont,
+  geistSans,
+  manrope,
+  lexend,
+  poppins,
+  jetbrainsMono,
+  lora
+} from '@/lib/fonts';
 
 export const metadata: Metadata = {
   title: "AYANDA",
@@ -28,16 +25,28 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" suppressHydrationWarning> {/* suppressHydrationWarning for FOUT script + theme provider */}
+      <head>
+        <FOUTPreventionScript />
+      </head>
       <body
         className={cn(
+          // Font variables are applied here, --font-selected-app in globals.css will pick one
           inter.variable,
-          orbitronFont.variable, // Use renamed font variable
-          "antialiased min-h-screen"
+          orbitronFont.variable,
+          geistSans.variable,
+          manrope.variable,
+          lexend.variable,
+          poppins.variable,
+          jetbrainsMono.variable,
+          lora.variable,
+          "antialiased min-h-screen bg-background text-foreground" // Use shadcn vars for base
         )}
       >
-        <AuthSessionProvider> {/* Wrap children with AuthSessionProvider */}
-          {children}
+        <AuthSessionProvider>
+          <ThemeProvider>
+            {children}
+          </ThemeProvider>
         </AuthSessionProvider>
       </body>
     </html>
