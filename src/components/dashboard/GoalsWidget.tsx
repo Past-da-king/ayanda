@@ -1,36 +1,44 @@
 import React from 'react';
 import { Goal } from '@/types';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
-import { Progress } from "@/components/ui/progress";
+import { cn } from '@/lib/utils';
 
 interface GoalsWidgetProps {
-  goals: Goal[];
+  goals: Goal[]; // Pre-filtered goals
   onNavigate: () => void;
 }
 
 export function GoalsWidget({ goals, onNavigate }: GoalsWidgetProps) {
-  const displayedGoal = goals.length > 0 ? goals[0] : null;
+  const displayedGoals = goals.slice(0, 3); // Show max 3 in summary
 
   return (
     <DashboardCardWrapper 
         title="GOALS" 
-        onClick={onNavigate} 
-        className="min-h-[280px] lg:min-h-[300px]" // Made taller
+        onNavigate={onNavigate} 
+        id="goals-widget-summary"
+        contentClassName="space-y-3" // space-y from target
     >
-      {displayedGoal ? (
-        <div className="space-y-2 mt-1">
-          <p className="text-sm font-medium text-foreground">{displayedGoal.name}</p>
-          <Progress 
-            value={(displayedGoal.currentValue / displayedGoal.targetValue) * 100} 
-            className="h-2.5 bg-input" // Slightly thicker progress bar
-            indicatorClassName="bg-primary"
-          />
-          <p className="text-xs text-muted-foreground">
-            {displayedGoal.currentValue}{displayedGoal.unit} / {displayedGoal.targetValue}{displayedGoal.unit} ({Math.round((displayedGoal.currentValue / displayedGoal.targetValue) * 100)}%)
-          </p>
-        </div>
+      {displayedGoals.length > 0 ? (
+        <ul className="space-y-3"> {/* Added ul for semantics */}
+          {displayedGoals.map((goal) => {
+            const percentage = goal.targetValue > 0 ? Math.min(100, Math.round((goal.currentValue / goal.targetValue) * 100)) : 0;
+            return (
+              <li key={goal.id} className="widget-item"> {/* widget-item class */}
+                <p className="text-sm truncate" title={goal.name}>
+                  {goal.name} - <span className="font-semibold accent-text">{percentage}%</span>
+                </p>
+                <div className="w-full bg-slate-700 rounded-full h-1.5 mt-1.5">
+                  <div 
+                    className="bg-[var(--accent-color-val)] h-1.5 rounded-full" 
+                    style={{ width: `${percentage}%` }}
+                  ></div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       ) : (
-        <p className="text-sm text-muted-foreground mt-1">No goals set yet. Add one!</p>
+        <p className="text-sm text-[var(--text-muted-color-val)] p-2">No goals set.</p>
       )}
     </DashboardCardWrapper>
   );

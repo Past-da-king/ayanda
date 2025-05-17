@@ -7,19 +7,19 @@ import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
 
 interface FooterChatProps {
-  onSendCommand: (command: string) => void;
+  onSendCommand: (command: string) => void; // New prop
 }
 
-export function FooterChat({ onSendCommand }: FooterChatProps) {
+export function FooterChat({ onSendCommand }: FooterChatProps) { // Destructure new prop
   const [message, setMessage] = useState('');
 
   const handleSend = () => {
     if (message.trim()) {
-      onSendCommand(message.trim());
+      onSendCommand(message.trim()); // Use the handler
       setMessage('');
     }
   };
-
+  // ... (rest of the component remains the same styling as before) ...
   return (
     <div 
       className={cn(

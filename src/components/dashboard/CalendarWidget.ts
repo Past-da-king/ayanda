@@ -11,16 +11,21 @@ interface CalendarWidgetProps {
   onNavigate: () => void;
 }
 
-const DayCell = ({ date, events, dayHasEvents }: { date: Date; events: AppEvent[]; dayHasEvents: (currentDate: Date, allEvents: AppEvent[]) => boolean }) => {
-  const displayDate = date.getDate();
-  const showDot = dayHasEvents(date, events);
+// Helper component to render day cell with potential event dot
+const DayCell = ({ date, events, dayHasEvents }: { date: Date | undefined; events: AppEvent[]; dayHasEvents: (date: Date, allEvents: AppEvent[]) => boolean }) => {
+  if (!date) return null; // Handle case where date might be undefined (though Calendar usually provides it)
+
+  const hasEvent = dayHasEvents(date, events);
   return (
     <>
-      {displayDate}
-      {showDot ? <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[var(--accent-color-val)]/80 rounded-full" /> : null}
+      {date.getDate()} {/* This is the number of the day */}
+      {hasEvent && (
+        <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[var(--accent-color-val)]/80 rounded-full"></span>
+      )}
     </>
   );
 };
+
 
 export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
   const [selectedDay, setSelectedDay] = useState<Date | undefined>(new Date());
@@ -31,13 +36,13 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
     setCurrentMonthForTitle(dateToUse.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase());
   }, [selectedDay]);
 
-  const dayHasEvents = (currentDate: Date, allEvents: AppEvent[]): boolean => {
-    if (!currentDate || !Array.isArray(allEvents)) return false;
+  const dayHasEvents = (date: Date, allEvents: AppEvent[]): boolean => {
+    if (!date || !Array.isArray(allEvents)) return false;
     return allEvents.some(event => {
       const eventDate = new Date(event.date);
-      return eventDate.getFullYear() === currentDate.getFullYear() &&
-             eventDate.getMonth() === currentDate.getMonth() &&
-             eventDate.getDate() === currentDate.getDate();
+      return eventDate.getFullYear() === date.getFullYear() &&
+             eventDate.getMonth() === date.getMonth() &&
+             eventDate.getDate() === date.getDate();
     });
   };
 
@@ -47,34 +52,34 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
         onNavigate={onNavigate} 
         id="calendar-widget-summary"
         className="min-h-[280px] lg:min-h-[300px] flex flex-col"
-        contentClassName="!p-2 flex flex-col flex-grow items-center justify-center" // This p-2 provides padding for the title and the calendar container
+        contentClassName="!p-2 flex flex-col flex-grow items-center justify-center"
     >
       <Calendar
         mode="single"
         selected={selectedDay}
         onSelect={setSelectedDay}
         month={selectedDay || new Date()}
-        className="p-0 w-full" // Removed max-w-[260px], calendar will fill its container within the p-2 wrapper
+        className="p-0 w-full max-w-[260px]"
         classNames={{
           months: "flex flex-col items-center",
-          month: "space-y-2 w-full", // Removed px-1, month div takes full width
+          month: "space-y-2 w-full px-1",
           caption: "flex justify-center pt-0.5 relative items-center text-sm mb-1",
-          caption_label: "text-sm font-medium accent-text sr-only", // Title is handled by DashboardCardWrapper
+          caption_label: "text-sm font-medium accent-text sr-only",
           nav: "space-x-1",
           nav_button: "h-6 w-6 p-0 opacity-0 cursor-default",
           
-          table: "w-full border-collapse", // Table takes full width of month div
-          head_row: "flex w-full", // Row takes full width, removed justify-around
+          table: "w-full border-collapse",
+          head_row: "flex w-full justify-around mb-1",
           head_cell: cn(
             "text-[var(--text-muted-color-val)] rounded-md",
             "flex items-center justify-center font-normal text-[0.75rem] p-0",
-            "h-7 flex-1 basis-0" // Each head cell takes 1/7th of the width
+            "h-7 w-full max-w-[2.25rem]"
           ),
-          row: "flex w-full mt-1", // Row takes full width, removed justify-around
+          row: "flex w-full mt-1 justify-around",
           cell: cn(
             "text-center p-0 relative focus-within:relative focus-within:z-20 rounded-md",
             "flex flex-col items-center justify-center",
-            "h-9 flex-1 basis-0" // Each day cell takes 1/7th of the width
+            "h-9 w-full max-w-[2.25rem]" 
           ),
           day: cn(
             "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-md",
@@ -86,6 +91,8 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
           day_disabled: "text-[var(--text-muted-color-val)]/30 opacity-30",
         }}
         formatters={{
+            // Pass the date to the DayCell formatter.
+            // The `date` parameter provided by `formatDay` here is the one we need.
             formatDay: (date) => <DayCell date={date} events={events} dayHasEvents={dayHasEvents} />,
         }}
         showOutsideDays={true}
@@ -96,3 +103,4 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
     </DashboardCardWrapper>
   );
 }
+
