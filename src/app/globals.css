@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+:root {
+  --background-rgb: 10, 10, 10; /* #0A0A0A - Darker background like mockup */
+  --foreground-rgb: 224, 224, 224; /* #E0E0E0 */
+
+  --card-background-rgb: 22, 27, 34; /* #161B22 */
+  --card-border-rgb: 48, 54, 61; /* #30363D */
+
+  /* Vibrant Blue from Mockup - Similar to Tailwind's cyan-400 or sky-500 */
+  --ayanda-blue-rgb: 34, 211, 238; /* Tailwind cyan-400: #22D3EE */
+  --ayanda-blue-foreground-rgb: 10, 10, 10; /* Dark text on blue buttons */
+
+  --primary-accent-rgb: var(--ayanda-blue-rgb); /* Using ayanda-blue as primary */
+  --primary-accent-foreground-rgb: var(--ayanda-blue-foreground-rgb);
+
+  --secondary-text-rgb: 160, 160, 160; /* #A0A0A0 */
+
+  --input-background-rgb: 31, 37, 46;
+  --input-border-rgb: 76, 84, 93;
+
+
+  /* Shadcn UI theming variables */
+  --background: theme('colors.background'); /* Updated below */
+  --foreground: theme('colors.foreground'); /* Updated below */
+
+  --card: theme('colors.card.DEFAULT');
+  --card-foreground: theme('colors.card.foreground');
+
+  --popover: theme('colors.popover.DEFAULT');
+  --popover-foreground: theme('colors.popover.foreground');
+
+  --primary: theme('colors.primary.DEFAULT');
+  --primary-foreground: theme('colors.primary.foreground');
+
+  --secondary: theme('colors.secondary.DEFAULT');
+  --secondary-foreground: theme('colors.secondary.foreground');
+
+  --muted: theme('colors.muted.DEFAULT');
+  --muted-foreground: theme('colors.muted.foreground');
+
+  --accent: theme('colors.accent.DEFAULT');
+  --accent-foreground: theme('colors.accent.foreground');
+
+  --destructive: theme('colors.destructive.DEFAULT');
+  --destructive-foreground: theme('colors.destructive.foreground');
+
+  --border: theme('colors.border');
+  --input: theme('colors.input');
+  --ring: theme('colors.ring');
+
+  --radius: 0.5rem;
+}
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 10 10 10; /* #0A0A0A */
+    --foreground: 224 224 224; /* #E0E0E0 */
+
+    --card: 22 27 34; /* #161B22 */
+    --card-foreground: 224 224 224;
+
+    --popover: 22 27 34;
+    --popover-foreground: 224 224 224;
+
+    --primary: 34 211 238; /* #22D3EE - AYANDA Blue */
+    --primary-foreground: 10 10 10; /* Dark text for blue buttons */
+
+    --secondary: 48 54 61; /* #30363D */
+    --secondary-foreground: 224 224 224;
+
+    --muted: 48 54 61;
+    --muted-foreground: 160 160 160; /* #A0A0A0 */
+
+    --accent: 48 54 61;
+    --accent-foreground: 224 224 224;
+
+    --destructive: 220 38 38; /* red-600 */
+    --destructive-foreground: 224 224 224;
+
+    --border: 48 54 61; /* #30363D */
+    --input: 76 84 93; /* #4C545D - For input borders if needed */
+    --ring: 34 211 238; /* AYANDA Blue for focus rings */
+  }
+}
+
+
+body {
+  background-color: hsl(var(--background));
+  color: hsl(var(--foreground));
+  font-family: var(--font-geist-sans);
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+  .font-orbitron {
+    font-family: var(--font-orbitron);
+  }
+}
+
+/* Custom scrollbar for webkit browsers */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: hsl(var(--card));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--primary));
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary) / 0.8);
+}
+
+/* For Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: hsl(var(--primary)) hsl(var(--card));
+}
