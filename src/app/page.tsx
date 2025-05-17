@@ -1,8 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react'; // Import useSession
-import { useRouter } from 'next/navigation'; // For redirect if not authenticated
+import { useSession } from 'next-auth/react'; 
+import { useRouter } from 'next/navigation'; 
 
 import { Header } from '@/components/layout/Header';
 import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
@@ -44,19 +44,18 @@ export default function HomePage() {
   const [initialLoadDone, setInitialLoadDone] = useState(false);
 
 
-  // Authentication check
   useEffect(() => {
-    if (status === "loading") return; // Don't do anything while loading
+    if (status === "loading") return; 
     if (!session && status === "unauthenticated") {
-      router.replace('/login?callbackUrl=/'); // Redirect to login if not authenticated
+      router.replace('/login?callbackUrl=/'); 
     } else if (session && status === "authenticated" && !initialLoadDone) {
-      setInitialLoadDone(true); // Mark that initial auth check and potential fetch can proceed
+      setInitialLoadDone(true); 
     }
   }, [session, status, router, initialLoadDone]);
 
 
   const fetchData = useCallback(async (categorySignal?: Category) => {
-    if (status !== "authenticated" && !categorySignal) return; // Don't fetch if not authenticated, unless it's an explicit call
+    if (status !== "authenticated" && !categorySignal) return; 
     
     setIsLoading(true);
     const categoryToFetch = categorySignal || currentCategory;
@@ -95,13 +94,13 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentCategory, status]); // Add status to dependencies
+  }, [currentCategory, status]); 
 
   useEffect(() => {
-    if (initialLoadDone && status === "authenticated") { // Only fetch if initial auth check is done and authenticated
+    if (initialLoadDone && status === "authenticated") { 
         fetchData();
     }
-  }, [fetchData, initialLoadDone, status]); // status ensures re-fetch on auth change if needed
+  }, [fetchData, initialLoadDone, status]); 
 
   useEffect(() => {
     const isAllProjects = currentCategory === "All Projects";
@@ -116,7 +115,6 @@ export default function HomePage() {
   }, [tasks, goals, notes, events, currentCategory]);
 
 
-  // --- CRUD Handlers (Remain the same, ensure they only run if authenticated if necessary) ---
   const handleAddTask = async (text: string, dueDate: string | undefined, category: Category) => {
     if (status !== "authenticated") return;
     const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
@@ -295,7 +293,7 @@ export default function HomePage() {
         if (isLoading || status === "loading") {
             return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
         }
-        if (status === "unauthenticated") { // Should be handled by middleware, but good fallback
+        if (status === "unauthenticated") { 
             return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Redirecting to login...</p></div>;
         }
         return (
@@ -318,28 +316,23 @@ export default function HomePage() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            {/* Potentially a simpler ProjectSelectorBar or placeholder if needed during loading */}
-            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+1.5rem)] flex justify-center items-center">
+            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> {/* Adjusted gap */}
                 <p className="text-xl accent-text">Initializing AYANDA...</p>
             </main>
-             {/* FooterChat might be hidden during initial full page load */}
         </div>
     );
   }
-  if (status === "unauthenticated" && (pathname === "/" || !["/login", "/register", "/landing"].includes(pathname))) {
-     // This state should ideally be brief as middleware handles redirection.
-     // You can show a loading or redirecting message.
+  if (status === "unauthenticated" && (router.pathname === "/" || !["/login", "/register", "/landing"].includes(router.pathname))) {
      return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+1.5rem)] flex justify-center items-center">
+            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> {/* Adjusted gap */}
                 <p className="text-xl accent-text">Redirecting to login...</p>
             </main>
         </div>
      );
   }
-  // Add a check for pathname to avoid rendering ProjectSelectorBar on auth pages.
-  // This is an approximation; middleware is the primary guard.
+
   const { pathname } = typeof window !== "undefined" ? window.location : { pathname: "/" };
   const showProjectBar = status === "authenticated" && !["/login", "/register", "/landing"].includes(pathname);
 
@@ -357,8 +350,10 @@ export default function HomePage() {
       <main 
         className={cn(
             "flex-grow px-6 pb-24",
-             // Adjust top padding based on whether project bar is shown
-            showProjectBar && viewMode === 'dashboard' ? "pt-[calc(5rem+2.875rem+1.5rem)]" : (viewMode === 'dashboard' ? "pt-[calc(5rem+1.5rem)]" : "pt-0")
+            // Adjust top padding based on whether project bar is shown
+            // 5rem (Header) + ~2.875rem (ProjectSelectorBar height from py-3 & content) + 0.75rem (desired gap)
+            showProjectBar && viewMode === 'dashboard' ? "pt-[calc(5rem+2.875rem+0.75rem)]" : 
+            (viewMode === 'dashboard' ? "pt-[calc(5rem+0.75rem)]" : "pt-0")
         )}
       >
         {renderView()}

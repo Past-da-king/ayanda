@@ -56,7 +56,7 @@ export function ThemeCustomizer() {
           <SelectTrigger>
             <SelectValue placeholder="Select font" />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="z-[999]">
             {availableFonts.map((fontOption) => (
               <SelectItem key={fontOption.key} value={fontOption.key} style={fontOption.previewStyle}>
                 {fontOption.name}

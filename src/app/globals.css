@@ -1,31 +1,16 @@
 @import "tailwindcss";
-/* Ensure 'tailwindcss-custom-variants' plugin is installed and configured if using @custom-variant */
-/* Or remove if not using: npm uninstall tailwindcss-custom-variants */
-/* @custom-variant dark (&:is(.dark *)); */
-
-/*
-  Link to Tailwind config if explicitly needed with Tailwind CSS v4+.
-  However, for dynamic CSS variable changes via JS, this might not be strictly
-  necessary for the color variables themselves, but good for other configs like fonts.
-  The `postcss.config.mjs` already includes `@tailwindcss/postcss`.
-*/
-/* @config "./tailwind.config.ts"; */
-
-
-@theme {
-  /* Make CSS variables available to Tailwind's theme() and JIT engine */
-  /* These are the *keys* Tailwind will recognize. Their *values* will be set by :root or ThemeProvider. */
-  
-  /* Shadcn/ui compatibility - map our theme to shadcn's expected vars */
-  /* These act as aliases. The ThemeProvider sets the --*-val variables. */
+@theme inline {
+  --color-background: var(--background);
+  /* Shadcn/ui compatibility - Aliases pointing to AYANDA source variables */
+  /* These tell Tailwind how to interpret its own utility classes like bg-popover */
   --background: var(--background-color-val);
   --foreground: var(--text-color-val);
-  --card: var(--widget-background-val);
+  --card: pink;
   --card-foreground: var(--text-color-val);
-  --popover: var(--widget-background-val);
-  --popover-foreground: var(--text-color-val);
+  --popover: green;
+  --popover-foreground:white;
   --primary: var(--accent-color-val);
-  --primary-foreground: var(--background-color-val); /* Default, can be overridden by theme */
+  --primary-foreground: var(--primary-foreground-val); /* Using a dedicated var for primary foreground */
   --secondary: var(--input-bg-val);
   --secondary-foreground: var(--text-color-val);
   --muted: var(--input-bg-val);
@@ -35,118 +20,134 @@
   --destructive: var(--danger-color-val);
   --destructive-foreground: var(--text-color-val);
   --border: var(--border-color-val);
-  --input: var(--border-color-val);
+  --input: var(--border-color-val); /* Input border often same as general border */
   --ring: hsl(var(--accent-color-hsl) / 0.5);
-
   --radius: 0.75rem;
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
 
-  /* Fonts - --font-selected-app will be set by ThemeProvider */
-  --font-sans: var(--font-selected-app), var(--font-inter); /* Fallback to Inter */
+
+
+
+
+  
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+
+
+  /* AYANDA source variables - DECLARE them for Tailwind's awareness. */
+  /* Actual default values are in :root. JS will override :root values. */
+  /* Declaring them here (even empty) helps Tailwind's JIT and theme() function. */
+  --accent-color-val: ;
+  --accent-color-hsl: ;
+  --primary-foreground-val: ; /* Dedicated variable for text on primary elements */
+  --background-color-val: ;
+  --widget-background-val: ;
+  --text-color-val: ;
+  --text-muted-color-val: ;
+  --border-color-val: ;
+  --input-bg-val: ;
+  --danger-color-val: ;
+
+  /* Fonts */
+  --font-sans: var(--font-selected-app), var(--font-inter);
   --font-orbitron: var(--font-orbitron-val);
-  /* Individual font variables are also available directly */
-  --font-inter: Inter, sans-serif; /* Define actual font stack for fallback */
+  --font-inter: Inter, sans-serif;
   --font-geist-sans: GeistSans, sans-serif;
   --font-manrope: Manrope, sans-serif;
   --font-lexend: Lexend, sans-serif;
   --font-poppins: Poppins, sans-serif;
   --font-jetbrains-mono: 'JetBrains Mono', monospace;
   --font-lora: Lora, serif;
-
-
-  /* AYANDA specific variables - these are the source of truth set by ThemeProvider */
-  /* Their default values are in :root */
-  --accent-color-val: #00DCFF;
-  --accent-color-hsl: 190 100% 50%;
-  --background-color-val: #0A0F14;
-  --widget-background-val: #101820;
-  --text-color-val: #E0E7FF;
-  --text-muted-color-val: #707A8A;
-  --border-color-val: rgba(0, 220, 255, 0.08);
-  --input-bg-val: rgba(255, 255, 255, 0.03);
-  --danger-color-val: #FF4757;
 }
 
-/* Default values set on :root, ThemeProvider will override these dynamically */
+/* Default values set on :root. ThemeProvider will override these dynamically. */
 :root {
-  /* AYANDA specific variables */
-  --accent-color-val: #00DCFF;
-  --accent-color-hsl: 190 100% 50%; /* HSL for #00DCFF */
-  --background-color-val: #0A0F14;
-  --widget-background-val: #101820;
-  --text-color-val: #E0E7FF;
-  --text-muted-color-val: #707A8A;
-  --border-color-val: rgba(0, 220, 255, 0.08);
-  --input-bg-val: rgba(255, 255, 255, 0.03);
+  /* AYANDA source variables */
+  --accent-color-val: #00DCFF; /* Default Cyan */
+  --accent-color-hsl: 190 100% 50%; 
+  --primary-foreground-val: #0A0F14; /* Default: Dark text for light primary (like Default Cyan's primary button) */
+  
+  --background-color-val: #0A0F14; /* Default Dark: Very Dark Blue/Gray */
+  --widget-background-val: #101820; /* Default Dark: Widget Background */
+  --text-color-val: #E0E7FF; /* Default Dark: Soft Lavender White */
+  --text-muted-color-val: #707A8A; /* Default Dark: Muted Blue/Gray */
+  --border-color-val: rgba(0, 220, 255, 0.12); /* Default Dark: Border (was 0.08) */
+  --input-bg-val: rgba(255, 255, 255, 0.03); /* Default Dark: Input Background */
   --danger-color-val: #FF4757;
-
-  /* Shadcn variables derived from AYANDA vars - these are effectively aliases */
-  /* These are defined here for initial render / no-JS fallback */
-  --background: var(--background-color-val);
-  --foreground: var(--text-color-val);
-  --card: var(--widget-background-val);
-  --card-foreground: var(--text-color-val);
-  --popover: var(--widget-background-val);
-  --popover-foreground: var(--text-color-val);
-  --primary: var(--accent-color-val);
-  --primary-foreground: var(--background-color-val); /* Text on primary elements, default dark on light accent */
-  --secondary: var(--input-bg-val);
-  --secondary-foreground: var(--text-color-val);
-  --muted: var(--input-bg-val);
-  --muted-foreground: var(--text-muted-color-val);
-  --accent: hsl(var(--accent-color-hsl) / 0.1); /* Accent bg (e.g., hover) */
-  --accent-foreground: var(--accent-color-val);  /* Text on accent bg */
-  --destructive: var(--danger-color-val);
-  --destructive-foreground: var(--text-color-val);
-  --border: var(--border-color-val);
-  --input: var(--border-color-val);
-  --ring: hsl(var(--accent-color-hsl) / 0.5); /* Focus ring */
-  --radius: 0.75rem;
 
   /* Font variable that ThemeProvider will update */
-  --font-selected-app: var(--font-inter); /* Default selected font */
+  --font-selected-app: var(--font-inter);
 }
 
+/*
+  When .dark class is applied by ThemeProvider:
+  These values are the defaults for dark mode if the theme object doesn't specify them,
+  OR they are what the theme object's "dark" mode specifically sets for these source variables.
+  The createThemeColors function in themes.ts already defines dark mode values for each theme.
+  This .dark:root block is mostly a fallback or for global dark mode overrides
+  not tied to a specific theme's dark ColorSet.
+  Given our themes.ts defines dark mode explicitly, this block might be redundant
+  unless you have global dark styles independent of the theme choice.
+*/
 .dark:root {
-  /* Default dark theme values (can be overridden by ThemeProvider) */
-  /* Example: if you want specific dark mode overrides not handled by theme objects */
+  /* Default Dark Theme (if not overridden by a specific theme's dark mode) */
+  --accent-color-val: #00DCFF;
+  --accent-color-hsl: 190 100% 50%;
+  --primary-foreground-val: #0A0F14; /* Text on primary */
+
+  --background-color-val: #0A0F14;
+  --widget-background-val: #101820;
+  --text-color-val: #E0E7FF;
+  --text-muted-color-val: #707A8A;
+  --border-color-val: rgba(0, 220, 255, 0.12);
+  --input-bg-val: rgba(255, 255, 255, 0.03);
+  /* danger-color usually stays the same or has a specific dark variant */
 }
 
 
 @layer base {
   body {
-    font-family: theme('fontFamily.sans'); /* Uses the dynamically set --font-selected-app */
-    background-color: var(--background-color-val); /* Fallback, JS will set --background */
-    color: var(--text-color-val); /* Fallback, JS will set --foreground */
+    font-family: theme('fontFamily.sans');
+    background-color: var(--background); /* Use the aliased shadcn variable */
+    color: var(--foreground);       /* Use the aliased shadcn variable */
     overflow-x: hidden;
   }
   * {
      border-color: var(--border); /* For shadcn components that expect --border */
+
   }
-  /* Custom scrollbar for webkit browsers */
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
   }
   ::-webkit-scrollbar-track {
-    background: rgba(255,255,255,0.02);
+    background: hsl(var(--accent-color-hsl) / 0.05); /* Track slightly tinted */
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(var(--accent-color-hsl) / 0.3); /* Use HSL for consistency */
+    background: hsl(var(--accent-color-hsl) / 0.4); /* Thumb more visible */
     border-radius: 2px;
   }
-  /* For Firefox */
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--accent-color-hsl) / 0.3) rgba(255,255,255,0.02);
+    scrollbar-color: hsl(var(--accent-color-hsl) / 0.4) hsl(var(--accent-color-hsl) / 0.05);
   }
 }
 
 @layer components {
   .widget-item {
-    background-color: var(--input-bg-val);
-    padding: 0.625rem 0.875rem; /* 10px 14px */
-    border-radius: 0.375rem; /* 6px */
-    font-size: 0.875rem; /* 14px */
+    background-color: var(--input-bg-val); /* Uses AYANDA source variable */
+    padding: 0.625rem 0.875rem; 
+    border-radius: 0.375rem; 
+    font-size: 0.875rem; 
     border-left: 3px solid transparent;
     transition-property: border-color, background-color;
     transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -154,19 +155,17 @@
     word-break: break-word;
   }
   .widget-item:hover {
-    border-left-color: var(--accent-color-val); /* Use themed accent */
-    background-color: hsl(var(--accent-color-hsl) / 0.05); /* Use themed accent with low opacity */
+    border-left-color: var(--accent-color-val); 
+    background-color: hsl(var(--accent-color-hsl) / 0.05); 
   }
 
-  /* General input field styling to match dashboard look */
   .input-field {
     @apply bg-[var(--input-bg-val)] border-[var(--border-color-val)] text-[var(--text-color-val)] placeholder:text-[var(--text-muted-color-val)];
     @apply focus:border-[var(--accent-color-val)] focus:ring-1 focus:ring-[var(--accent-color-val)]/50;
   }
   
-  /* Button primary style consistent with theme */
   .btn-primary {
-    @apply bg-[var(--accent-color-val)] text-[var(--primary-foreground)] hover:opacity-90;
+    @apply bg-[var(--accent-color-val)] text-[var(--primary-foreground-val)] hover:opacity-90;
   }
   .btn-icon {
     @apply text-[var(--text-muted-color-val)] hover:text-[var(--accent-color-val)];
