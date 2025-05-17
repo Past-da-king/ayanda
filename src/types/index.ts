@@ -1,3 +1,5 @@
+import { User as NextAuthUser } from 'next-auth';
+
 export interface Task {
   id: string;
   text: string;
@@ -23,20 +25,23 @@ export interface Note {
   lastEdited: string; // ISO string
 }
 
-// Define the Event type (or AppEvent if you prefer to keep the alias)
 export interface Event {
   id: string;
-  title: string; // Or 'name' if that's what your data uses
+  title: string; 
   date: string; // ISO string for the event's date and time
-  duration?: number; // Optional: duration in minutes
-  description?: string; // Optional
-  category: string; // This is used like projectId (align with how you use it in DueSoonWidget)
-  // lastEdited?: string; // If this field is used for event date like in the previous version of DueSoonWidget
+  duration?: number; 
+  description?: string; 
+  category: string; 
 }
 
 
-export type ViewMode = "dashboard" | "tasks" | "goals" | "notes" | "calendar"; // Added calendar
+export type ViewMode = "dashboard" | "tasks" | "goals" | "notes" | "calendar";
 
-export type Category = "All Projects" | "Personal Life" | "Work" | "Studies"; // Added "All Projects"
-// Or, if Category should map to Project names from your HTML data:
-// export type Category = "All Projects" | "Personal Life" | "Work Project X" | "Learning Hub";
+export type Category = "All Projects" | "Personal Life" | "Work" | "Studies";
+
+// For NextAuth session and JWT
+export interface AuthenticatedUser extends NextAuthUser {
+  id: string;
+  email: string;
+  name?: string | null;
+}

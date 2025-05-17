@@ -1,6 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { useSession } from 'next-auth/react'; // Import useSession
+import { useRouter } from 'next/navigation'; // For redirect if not authenticated
+
 import { Header } from '@/components/layout/Header';
 import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
 import { FooterChat } from '@/components/layout/FooterChat';
@@ -16,11 +19,13 @@ import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenVie
 import { Task, Goal, Note, Event as AppEvent, ViewMode, Category } from '@/types';
 import { cn } from '@/lib/utils';
 
-// Define base categories; "All Projects" is handled specially in UI
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
 
 export default function HomePage() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -30,15 +35,29 @@ export default function HomePage() {
   
   const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
 
-  // Derived states for filtered data (used by dashboard widgets)
   const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
   const [filteredGoals, setFilteredGoals] = useState<Goal[]>([]);
   const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
   const [filteredEvents, setFilteredEvents] = useState<AppEvent[]>([]);
 
   const [isLoading, setIsLoading] = useState(true);
+  const [initialLoadDone, setInitialLoadDone] = useState(false);
+
+
+  // Authentication check
+  useEffect(() => {
+    if (status === "loading") return; // Don't do anything while loading
+    if (!session && status === "unauthenticated") {
+      router.replace('/login?callbackUrl=/'); // Redirect to login if not authenticated
+    } else if (session && status === "authenticated" && !initialLoadDone) {
+      setInitialLoadDone(true); // Mark that initial auth check and potential fetch can proceed
+    }
+  }, [session, status, router, initialLoadDone]);
+
 
   const fetchData = useCallback(async (categorySignal?: Category) => {
+    if (status !== "authenticated" && !categorySignal) return; // Don't fetch if not authenticated, unless it's an explicit call
+    
     setIsLoading(true);
     const categoryToFetch = categorySignal || currentCategory;
     const queryCategory = categoryToFetch === "All Projects" ? "" : `?category=${encodeURIComponent(categoryToFetch)}`;
@@ -58,8 +77,7 @@ export default function HomePage() {
             notes: notesRes.statusText,
             events: eventsRes.statusText
         });
-        // Potentially set an error state here to show in UI
-        setTasks([]); setGoals([]); setNotes([]); setEvents([]); // Clear data on error
+        setTasks([]); setGoals([]); setNotes([]); setEvents([]);
       } else {
         const tasksData = await tasksRes.json();
         const goalsData = await goalsRes.json();
@@ -77,13 +95,14 @@ export default function HomePage() {
     } finally {
       setIsLoading(false);
     }
-  }, [currentCategory]); // Include currentCategory to refetch when it changes
+  }, [currentCategory, status]); // Add status to dependencies
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]); // fetchData is memoized with currentCategory
+    if (initialLoadDone && status === "authenticated") { // Only fetch if initial auth check is done and authenticated
+        fetchData();
+    }
+  }, [fetchData, initialLoadDone, status]); // status ensures re-fetch on auth change if needed
 
-  // Update filtered data for dashboard widgets whenever master data or currentCategory changes
   useEffect(() => {
     const isAllProjects = currentCategory === "All Projects";
     setFilteredTasks(
@@ -97,18 +116,20 @@ export default function HomePage() {
   }, [tasks, goals, notes, events, currentCategory]);
 
 
-  // --- CRUD Handlers ---
+  // --- CRUD Handlers (Remain the same, ensure they only run if authenticated if necessary) ---
   const handleAddTask = async (text: string, dueDate: string | undefined, category: Category) => {
+    if (status !== "authenticated") return;
     const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, dueDate, category: effectiveCategory }),
     });
-    if (res.ok) fetchData(currentCategory); // Refetch relevant data
+    if (res.ok) fetchData(currentCategory);
   };
 
   const handleToggleTask = async (taskId: string) => {
+    if (status !== "authenticated") return;
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -120,11 +141,13 @@ export default function HomePage() {
   };
 
   const handleDeleteTask = async (taskId: string) => {
+    if (status !== "authenticated") return;
     const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
     if (res.ok) fetchData(currentCategory);
   };
   
   const handleUpdateTask = async (taskId: string, newText: string, newDueDate?: string, newCategory?: Category) => {
+    if (status !== "authenticated") return;
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -136,6 +159,7 @@ export default function HomePage() {
   };
 
   const handleAddGoal = async (name: string, targetValue: number, unit: string, category: Category) => {
+    if (status !== "authenticated") return;
     const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/goals', {
       method: 'POST',
@@ -146,6 +170,7 @@ export default function HomePage() {
   };
 
   const handleUpdateGoal = async (goalId: string, currentValue?: number, name?: string, targetValue?: number, unit?: string, category?: Category) => {
+    if (status !== "authenticated") return;
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
 
@@ -167,11 +192,13 @@ export default function HomePage() {
   };
 
   const handleDeleteGoal = async (goalId: string) => {
+    if (status !== "authenticated") return;
     const res = await fetch(`/api/goals/${goalId}`, { method: 'DELETE' });
     if (res.ok) fetchData(currentCategory);
   };
   
   const handleAddNote = async (title: string | undefined, content: string, category: Category) => {
+    if (status !== "authenticated") return;
     const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/notes', {
       method: 'POST',
@@ -182,6 +209,7 @@ export default function HomePage() {
   };
 
   const handleUpdateNote = async (noteId: string, title: string | undefined, content: string, category?: Category) => {
+     if (status !== "authenticated") return;
      const note = notes.find(n => n.id === noteId);
      if (!note) return;
     const res = await fetch(`/api/notes/${noteId}`, {
@@ -193,11 +221,13 @@ export default function HomePage() {
   };
 
   const handleDeleteNote = async (noteId: string) => {
+    if (status !== "authenticated") return;
     const res = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
     if (res.ok) fetchData(currentCategory);
   };
 
   const handleAddEvent = async (title: string, date: string, category: Category, description?: string) => {
+    if (status !== "authenticated") return;
     const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/events', {
       method: 'POST',
@@ -208,6 +238,7 @@ export default function HomePage() {
   };
   
   const handleUpdateEvent = async (eventId: string, title: string, date: string, category: Category, description?: string) => {
+    if (status !== "authenticated") return;
     const res = await fetch(`/api/events/${eventId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -217,11 +248,13 @@ export default function HomePage() {
   };
 
   const handleDeleteEvent = async (eventId: string) => {
+    if (status !== "authenticated") return;
     const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
     if (res.ok) fetchData(currentCategory);
   };
 
   const handleAiInputCommand = async (command: string) => {
+    if (status !== "authenticated") return;
     const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,17 +263,15 @@ export default function HomePage() {
     if (res.ok) {
         const result = await res.json();
         console.log("AI Command result:", result);
-        fetchData(currentCategory); // Refetch data after AI command potentially adds something
+        fetchData(currentCategory); 
     } else {
         const errorResult = await res.json();
         console.error("AI Command failed:", errorResult);
-        // Optionally show an error message to the user
     }
   };
 
   const onCategoryChange = (category: Category) => {
     setCurrentCategory(category);
-    // Fetch data will be called by the useEffect watching currentCategory
   };
 
   const renderView = () => {
@@ -250,7 +281,6 @@ export default function HomePage() {
         onClose: () => setViewMode('dashboard'),
     };
     
-    // Use all data for views, filtering is handled inside the view components or by their API calls
     switch (viewMode) {
       case 'tasks':
         return <TasksView {...commonViewProps} tasks={tasks} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} onUpdateTask={handleUpdateTask} />;
@@ -262,8 +292,11 @@ export default function HomePage() {
         return <CalendarFullScreenView {...commonViewProps} events={events} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} onDeleteEvent={handleDeleteEvent} />;
       case 'dashboard':
       default:
-        if (isLoading) {
+        if (isLoading || status === "loading") {
             return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
+        }
+        if (status === "unauthenticated") { // Should be handled by middleware, but good fallback
+            return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Redirecting to login...</p></div>;
         }
         return (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
@@ -272,7 +305,6 @@ export default function HomePage() {
             </div>
             <div className="flex flex-col space-y-5 md:space-y-6">
               <CalendarWidget events={filteredEvents} onNavigate={() => setViewMode('calendar')} />
-              {/* For DueSoonWidget, pass all tasks/events and let it filter by its own date logic + currentProjectId */}
               <DueSoonWidget tasks={tasks} events={events} currentProjectId={currentCategory === "All Projects" ? null : currentCategory} />
             </div>
             <GoalsWidget goals={filteredGoals} onNavigate={() => setViewMode('goals')} />
@@ -282,23 +314,56 @@ export default function HomePage() {
     }
   };
 
+  if (status === "loading" && !initialLoadDone) {
+    return (
+        <div className="flex flex-col min-h-screen">
+            <Header />
+            {/* Potentially a simpler ProjectSelectorBar or placeholder if needed during loading */}
+            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+1.5rem)] flex justify-center items-center">
+                <p className="text-xl accent-text">Initializing AYANDA...</p>
+            </main>
+             {/* FooterChat might be hidden during initial full page load */}
+        </div>
+    );
+  }
+  if (status === "unauthenticated" && (pathname === "/" || !["/login", "/register", "/landing"].includes(pathname))) {
+     // This state should ideally be brief as middleware handles redirection.
+     // You can show a loading or redirecting message.
+     return (
+        <div className="flex flex-col min-h-screen">
+            <Header />
+            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+1.5rem)] flex justify-center items-center">
+                <p className="text-xl accent-text">Redirecting to login...</p>
+            </main>
+        </div>
+     );
+  }
+  // Add a check for pathname to avoid rendering ProjectSelectorBar on auth pages.
+  // This is an approximation; middleware is the primary guard.
+  const { pathname } = typeof window !== "undefined" ? window.location : { pathname: "/" };
+  const showProjectBar = status === "authenticated" && !["/login", "/register", "/landing"].includes(pathname);
+
+
   return (
     <div className="flex flex-col min-h-screen">
       <Header />
-      <ProjectSelectorBar 
-        currentCategory={currentCategory}
-        onCategoryChange={onCategoryChange}
-        availableCategories={availableCategoriesForDropdown}
-      />
+      {showProjectBar && (
+         <ProjectSelectorBar 
+            currentCategory={currentCategory}
+            onCategoryChange={onCategoryChange}
+            availableCategories={availableCategoriesForDropdown}
+          />
+      )}
       <main 
         className={cn(
             "flex-grow px-6 pb-24",
-            viewMode === 'dashboard' ? "pt-[calc(5rem+2.875rem+1.5rem)]" : "pt-0" 
+             // Adjust top padding based on whether project bar is shown
+            showProjectBar && viewMode === 'dashboard' ? "pt-[calc(5rem+2.875rem+1.5rem)]" : (viewMode === 'dashboard' ? "pt-[calc(5rem+1.5rem)]" : "pt-0")
         )}
       >
         {renderView()}
       </main>
-      <FooterChat onSendCommand={handleAiInputCommand} />
+      {status === "authenticated" && <FooterChat onSendCommand={handleAiInputCommand} />}
     </div>
   );
 }

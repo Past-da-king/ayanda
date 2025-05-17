@@ -2,17 +2,18 @@ import type { Metadata } from "next";
 import { Inter, Orbitron } from "next/font/google";
 import "./globals.css";
 import { cn } from "@/lib/utils";
+import AuthSessionProvider from "@/components/auth/AuthSessionProvider"; // Import the provider
 
 const inter = Inter({
   subsets: ["latin"],
-  variable: "--font-inter", // Matches CSS variable in globals.css
+  variable: "--font-inter",
   display: 'swap',
 });
 
-const orbitron = Orbitron({
+const orbitronFont = Orbitron({ // Renamed to avoid conflict with Orbitron type
   subsets: ["latin"],
-  variable: "--font-orbitron-val", // Matches CSS variable in globals.css
-  weight: ["500", "700"], // As used in the target HTML
+  variable: "--font-orbitron-val",
+  weight: ["500", "700"],
   display: 'swap',
 });
 
@@ -27,15 +28,17 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Assuming dark is the default and only theme */}
+    <html lang="en" className="dark">
       <body
         className={cn(
           inter.variable,
-          orbitron.variable,
-          "antialiased min-h-screen" // bg and text color applied via @layer base in globals.css
+          orbitronFont.variable, // Use renamed font variable
+          "antialiased min-h-screen"
         )}
       >
-        {children}
+        <AuthSessionProvider> {/* Wrap children with AuthSessionProvider */}
+          {children}
+        </AuthSessionProvider>
       </body>
     </html>
   );
