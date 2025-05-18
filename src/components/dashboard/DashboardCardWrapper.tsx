@@ -11,17 +11,18 @@ const ExpandIcon = () => (
 interface DashboardCardWrapperProps {
   title: string;
   children: React.ReactNode;
+  icon?: React.ReactNode; // Optional icon for the title
   className?: string;
   contentClassName?: string;
-  onNavigate?: () => void; // Renamed from onMoreOptions / onClick for clarity
-  // onExpand?: () => void; // if onNavigate is used for card click, this could be specific to expand icon
-  id?: string; // For targeting specific widgets if needed
-  allowExpand?: boolean; // To control if expand icon is shown
+  onNavigate?: () => void; 
+  id?: string; 
+  allowExpand?: boolean; 
 }
 
 export function DashboardCardWrapper({ 
   title, 
   children, 
+  icon,
   className, 
   contentClassName, 
   onNavigate, 
@@ -35,7 +36,7 @@ export function DashboardCardWrapper({
   };
 
   const handleExpandClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click if icon is clicked
+    e.stopPropagation(); 
     if (onNavigate) {
       onNavigate();
     }
@@ -46,22 +47,24 @@ export function DashboardCardWrapper({
       id={id}
       className={cn(
         "bg-[var(--widget-background-val)] border border-[var(--border-color-val)]",
-        "shadow-[0_4px_15px_rgba(0,0,0,0.2)] rounded-[0.75rem]", // border-radius from target
+        "shadow-[0_4px_15px_rgba(0,0,0,0.2)] rounded-[0.75rem]", 
         "flex flex-col",
-        "transition-transform duration-200 ease-out hover:translate-y-[-2px] hover:shadow-[0_6px_20px_rgba(0,220,255,0.07)]", // hover effects
-        onNavigate && allowExpand === false ? "cursor-pointer" : "", // Only make card itself clickable if no expand icon, or if expand icon does same
+        "transition-transform duration-200 ease-out hover:translate-y-[-2px] hover:shadow-[0_6px_20px_rgba(0,220,255,0.07)]", 
+        onNavigate && allowExpand === false ? "cursor-pointer" : "", 
         className
       )}
-      onClick={onNavigate && allowExpand === false ? handleCardClick : undefined} // Click on card only if not using expand icon for nav
+      onClick={onNavigate && allowExpand === false ? handleCardClick : undefined} 
     >
-      {/* Widget Header */}
       <div className={cn(
         "border-b border-[var(--border-color-val)]",
-        "px-4 py-3", // padding 0.75rem 1rem
-        "mb-3", // margin-bottom 0.75rem
+        "px-4 py-3", 
+        "mb-3", 
         "flex justify-between items-center"
       )}>
-        <h2 className="font-orbitron text-lg accent-text">{title}</h2>
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="font-orbitron text-lg accent-text">{title}</h2>
+        </div>
         {allowExpand && onNavigate && (
           <button 
             onClick={handleExpandClick} 
@@ -74,11 +77,10 @@ export function DashboardCardWrapper({
         )}
       </div>
 
-      {/* Widget Content Summary */}
       <div className={cn(
-        "flex-grow overflow-y-auto", // flex-grow for filling space
-        "px-4 pb-3", // padding 0 1rem 0.75rem 1rem
-        "widget-content-summary-scrollbars", // For custom scrollbar styling if needed beyond global
+        "flex-grow overflow-y-auto", 
+        "px-4 pb-3", 
+        "widget-content-summary-scrollbars", 
         contentClassName
       )}>
         {children}
@@ -86,3 +88,4 @@ export function DashboardCardWrapper({
     </div>
   );
 }
+

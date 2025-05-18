@@ -44,7 +44,7 @@ export function ThemeCustomizer() {
               >
                 {themeKey === themeOption.key && <CheckIcon className="h-4 w-4 text-white mix-blend-difference" />}
               </span>
-              <span className="text-xs text-white mix-blend-difference">{themeOption.displayName}</span>
+              {/* <span className="text-xs text-white mix-blend-difference">{themeOption.displayName}</span> */}
             </Button>
           ))}
         </div>

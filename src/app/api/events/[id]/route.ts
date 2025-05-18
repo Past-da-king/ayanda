@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
-import EventModel, { IEvent } from '@/models/EventModel';
-import { Event as AppEvent } from '@/types';
+import EventModel from '@/models/EventModel'; // Removed IEvent as it's inferred
+import { Event as AppEvent, RecurrenceRule } from '@/types';
+import mongoose from 'mongoose';
 
 interface Params {
   id: string;
@@ -11,14 +12,24 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   await dbConnect();
   const { id } = params;
   try {
-    const body: Partial<AppEvent> = await request.json();
-    const updatedEvent = await EventModel.findOneAndUpdate({ id: id }, body, { new: true, runValidators: true });
+    const body: Partial<Omit<AppEvent, 'id'>> & { recurrenceRule?: RecurrenceRule | null } = await request.json();
+    
+    const updatePayload: any = { ...body };
+    if (body.hasOwnProperty('recurrenceRule') && !body.recurrenceRule) {
+        updatePayload.$unset = { recurrenceRule: "" }; // To remove the field from DB if set to null
+        delete updatePayload.recurrenceRule; // Don't send recurrenceRule field itself if unsetting
+    }
+
+    const updatedEvent = await EventModel.findOneAndUpdate({ id: id }, updatePayload, { new: true, runValidators: true });
     if (!updatedEvent) {
       return NextResponse.json({ message: 'Event not found' }, { status: 404 });
     }
     return NextResponse.json(updatedEvent, { status: 200 });
   } catch (error) {
     console.error(`Failed to update event ${id}:`, error);
+     if (error instanceof mongoose.Error.ValidationError) {
+        return NextResponse.json({ message: 'Validation failed', errors: error.errors }, { status: 400 });
+    }
     return NextResponse.json({ message: `Failed to update event ${id}`, error: (error as Error).message }, { status: 500 });
   }
 }

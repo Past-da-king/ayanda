@@ -49,7 +49,7 @@ export function ProjectSelectorBar({
       className={cn(
         "fixed left-0 right-0 z-[90]",
         "bg-background", // Use themed background
-        "px-6 py-3 border-b border-border", // Add bottom border to match header style for integration
+       // Add bottom border to match header style for integration
         // "shadow-[0_2px_5px_rgba(0,0,0,0.1)]", // Shadow removed for less separation
         "flex items-center justify-center"
       )}

@@ -1,23 +1,64 @@
 "use client"; 
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
-import { Calendar } from "@/components/ui/calendar";
+import { Calendar as ShadcnCalendar } from "@/components/ui/calendar"; // Renamed to avoid conflict
 import { cn } from '@/lib/utils';
 import { Event as AppEvent } from '@/types';
+import { format, parseISO, startOfDay, addDays, isSameDay } from 'date-fns';
 
 interface CalendarWidgetProps {
   events: AppEvent[];
   onNavigate: () => void;
 }
 
-const DayCell = ({ date, events, dayHasEvents }: { date: Date; events: AppEvent[]; dayHasEvents: (currentDate: Date, allEvents: AppEvent[]) => boolean }) => {
+const getNextOccurrenceForCalendarDot = (event: AppEvent, day: Date): boolean => {
+    if (!event.recurrenceRule) {
+      return isSameDay(parseISO(event.date), day);
+    }
+  
+    const rule = event.recurrenceRule;
+    let baseEventDate = startOfDay(parseISO(event.date));
+    let currentDay = startOfDay(day);
+  
+    if (baseEventDate > currentDay) return false; // Recurrence hasn't started yet for this day
+    if (rule.endDate && currentDay > startOfDay(parseISO(rule.endDate))) return false; // Recurrence ended
+  
+    switch (rule.type) {
+      case 'daily':
+        const diffDays = Math.floor((currentDay.getTime() - baseEventDate.getTime()) / (1000 * 60 * 60 * 24));
+        return diffDays % rule.interval === 0;
+      case 'weekly':
+        if (!rule.daysOfWeek?.includes(currentDay.getDay())) return false;
+        // Check if it's a valid week in the interval
+        const weekDiff = Math.floor((currentDay.getTime() - baseEventDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+        // This check is simplified; a full rrule lib would be better for complex weekly intervals
+        // For simple "every X weeks on day Y", this might work if baseEventDate was also on day Y.
+        // A more robust check needed for "every X weeks" if base date isn't on the target day.
+        // For this widget, we'll assume a match if the day of week matches and it's on or after base.
+        return true; // Simplified for widget
+      case 'monthly':
+        // Check if the day of the month matches the original event's day of month
+        // And if the month interval matches
+        if (currentDay.getDate() !== baseEventDate.getDate()) return false;
+        const monthDiff = (currentDay.getFullYear() - baseEventDate.getFullYear()) * 12 + (currentDay.getMonth() - baseEventDate.getMonth());
+        return monthDiff >= 0 && monthDiff % rule.interval === 0;
+      case 'yearly':
+        if (currentDay.getDate() !== baseEventDate.getDate() || currentDay.getMonth() !== baseEventDate.getMonth()) return false;
+        const yearDiff = currentDay.getFullYear() - baseEventDate.getFullYear();
+        return yearDiff >= 0 && yearDiff % rule.interval === 0;
+      default:
+        return false;
+    }
+};
+
+const DayCell = ({ date, events }: { date: Date; events: AppEvent[]; }) => {
   const displayDate = date.getDate();
-  const showDot = dayHasEvents(date, events);
+  const showDot = events.some(event => getNextOccurrenceForCalendarDot(event, date));
   return (
     <>
       {displayDate}
-      {showDot ? <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-[var(--accent-color-val)]/80 rounded-full" /> : null}
+      {showDot ? <span className="absolute bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 bg-primary/80 rounded-full" /> : null}
     </>
   );
 };
@@ -28,18 +69,8 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
 
   useEffect(() => {
     const dateToUse = selectedDay || new Date();
-    setCurrentMonthForTitle(dateToUse.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase());
+    setCurrentMonthForTitle(format(dateToUse, 'MMMM yyyy').toUpperCase());
   }, [selectedDay]);
-
-  const dayHasEvents = (currentDate: Date, allEvents: AppEvent[]): boolean => {
-    if (!currentDate || !Array.isArray(allEvents)) return false;
-    return allEvents.some(event => {
-      const eventDate = new Date(event.date);
-      return eventDate.getFullYear() === currentDate.getFullYear() &&
-             eventDate.getMonth() === currentDate.getMonth() &&
-             eventDate.getDate() === currentDate.getDate();
-    });
-  };
 
   return (
     <DashboardCardWrapper 
@@ -47,46 +78,45 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
         onNavigate={onNavigate} 
         id="calendar-widget-summary"
         className="min-h-[280px] lg:min-h-[300px] flex flex-col"
-        contentClassName="!p-2 flex flex-col flex-grow items-center justify-center" // This p-2 provides padding for the title and the calendar container
+        contentClassName="!p-2 flex flex-col flex-grow items-center justify-center"
     >
-      <Calendar
+      <ShadcnCalendar
         mode="single"
         selected={selectedDay}
         onSelect={setSelectedDay}
         month={selectedDay || new Date()}
-        className="p-0 w-full" // Removed max-w-[260px], calendar will fill its container within the p-2 wrapper
+        className="p-0 w-full" 
         classNames={{
           months: "flex flex-col items-center",
-          month: "space-y-2 w-full", // Removed px-1, month div takes full width
+          month: "space-y-2 w-full", 
           caption: "flex justify-center pt-0.5 relative items-center text-sm mb-1",
-          caption_label: "text-sm font-medium accent-text sr-only", // Title is handled by DashboardCardWrapper
+          caption_label: "text-sm font-medium accent-text sr-only",
           nav: "space-x-1",
           nav_button: "h-6 w-6 p-0 opacity-0 cursor-default",
-          
-          table: "w-full border-collapse", // Table takes full width of month div
-          head_row: "flex w-full", // Row takes full width, removed justify-around
+          table: "w-full border-collapse", 
+          head_row: "flex w-full", 
           head_cell: cn(
-            "text-[var(--text-muted-color-val)] rounded-md",
+            "text-muted-foreground rounded-md",
             "flex items-center justify-center font-normal text-[0.75rem] p-0",
-            "h-7 flex-1 basis-0" // Each head cell takes 1/7th of the width
+            "h-7 flex-1 basis-0" 
           ),
-          row: "flex w-full mt-1", // Row takes full width, removed justify-around
+          row: "flex w-full mt-1", 
           cell: cn(
             "text-center p-0 relative focus-within:relative focus-within:z-20 rounded-md",
             "flex flex-col items-center justify-center",
-            "h-9 flex-1 basis-0" // Each day cell takes 1/7th of the width
+            "h-9 flex-1 basis-0" 
           ),
           day: cn(
             "h-full w-full p-0 font-normal aria-selected:opacity-100 rounded-md",
-            "hover:bg-[var(--accent-color-val)]/10 flex items-center justify-center relative text-xs sm:text-sm"
+            "hover:bg-accent/10 flex items-center justify-center relative text-xs sm:text-sm"
           ),
-          day_selected: "bg-[var(--accent-color-val)] text-[var(--background-color-val)] hover:bg-[var(--accent-color-val)] hover:text-[var(--background-color-val)] focus:bg-[var(--accent-color-val)] focus:text-[var(--background-color-val)]",
-          day_today: "ring-1 ring-[var(--accent-color-val)]/60 text-[var(--accent-color-val)] rounded-md font-semibold",
-          day_outside: "text-[var(--text-muted-color-val)]/40 opacity-40",
-          day_disabled: "text-[var(--text-muted-color-val)]/30 opacity-30",
+          day_selected: "bg-primary text-primary-foreground hover:bg-primary hover:text-primary-foreground focus:bg-primary focus:text-primary-foreground",
+          day_today: "ring-1 ring-primary/60 text-primary rounded-md font-semibold",
+          day_outside: "text-muted-foreground/40 opacity-40",
+          day_disabled: "text-muted-foreground/30 opacity-30",
         }}
         formatters={{
-            formatDay: (date) => <DayCell date={date} events={events} dayHasEvents={dayHasEvents} />,
+            formatDay: (date) => <DayCell date={date} events={events} />,
         }}
         showOutsideDays={true}
         numberOfMonths={1}

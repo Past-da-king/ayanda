@@ -65,12 +65,63 @@ const config: Config = {
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
       },
-      // ... any other extensions
+      // Add typography for react-markdown
+      typography: (theme: (path: string) => any) => ({
+        DEFAULT: {
+          css: {
+            color: theme('colors.foreground'),
+            a: {
+              color: theme('colors.primary'),
+              '&:hover': {
+                color: `hsl(var(--accent-color-hsl) / 0.8)`,
+              },
+            },
+            strong: { color: theme('colors.foreground') },
+            code: { color: theme('colors.primary'), backgroundColor: `hsl(var(--accent-color-hsl) / 0.1)` , padding: '0.2em 0.4em', borderRadius: '0.25rem'},
+            blockquote: { color: theme('colors.muted-foreground'), borderLeftColor: theme('colors.border')},
+            h1: { color: theme('colors.foreground') },
+            h2: { color: theme('colors.foreground') },
+            h3: { color: theme('colors.foreground') },
+            h4: { color: theme('colors.foreground') },
+            'ul > li::before': { backgroundColor: theme('colors.muted-foreground') },
+            'ol > li::before': { color: theme('colors.muted-foreground') },
+          },
+        },
+        sm: { // for prose-sm
+             css: {
+                fontSize: '0.875rem', // text-sm
+                p: { marginTop: '0.75em', marginBottom: '0.75em'},
+                ul: { marginTop: '0.75em', marginBottom: '0.75em'},
+                ol: { marginTop: '0.75em', marginBottom: '0.75em'},
+                // Add other specific sm styles if needed
+             }
+        },
+        invert: { // For dark mode, if using prose-invert
+          css: {
+            color: theme('colors.foreground'), // Assuming foreground is already dark-mode aware
+            a: {
+              color: theme('colors.primary'),
+               '&:hover': {
+                color: `hsl(var(--accent-color-hsl) / 0.8)`,
+              },
+            },
+            strong: { color: theme('colors.foreground') },
+            code: { color: theme('colors.primary'), backgroundColor: `hsl(var(--accent-color-hsl) / 0.15)`},
+            blockquote: { color: theme('colors.muted-foreground'), borderLeftColor: theme('colors.border')},
+            h1: { color: theme('colors.foreground') },
+            h2: { color: theme('colors.foreground') },
+            h3: { color: theme('colors.foreground') },
+            h4: { color: theme('colors.foreground') },
+            'ul > li::before': { backgroundColor: theme('colors.muted-foreground') },
+            'ol > li::before': { color: theme('colors.muted-foreground') },
+          },
+        },
+      }),
     },
   },
   plugins: [
-    require('tailwindcss-animate'), // For shadcn ui if used
-    // any other plugins
+    require('tailwindcss-animate'),
+    require('@tailwindcss/typography'), // New plugin
   ],
 };
 

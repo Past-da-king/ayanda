@@ -1,6 +1,6 @@
 import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold, GenerationConfig } from "@google/generative-ai";
-import { Category, Task, Goal, Note, Event as AppEvent } from '@/types';
-import { format, addDays, parseISO } from 'date-fns';
+import { Category, Task, Goal, Note, Event as AppEvent, RecurrenceRule, SubTask } from '@/types';
+import { format, addDays, parseISO, isValid } from 'date-fns';
 
 const API_KEY = process.env.GEMINI_API_KEY;
 
@@ -9,7 +9,6 @@ if (!API_KEY) {
 }
 
 const genAI = new GoogleGenerativeAI(API_KEY);
-
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
 
 const generationConfig: GenerationConfig = {
@@ -17,7 +16,7 @@ const generationConfig: GenerationConfig = {
   topP: 0.95,
   topK: 64,
   maxOutputTokens: 8192,
-  responseMimeType: "application/json", // Ensure JSON output
+  responseMimeType: "application/json",
 };
 
 const safetySettings = [
@@ -27,71 +26,92 @@ const safetySettings = [
   { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_MEDIUM_AND_ABOVE },
 ];
 
-function getTodaysDate() {
-  return format(new Date(), 'yyyy-MM-dd');
-}
-function getTomorrowsDate() {
-  return format(addDays(new Date(), 1), 'yyyy-MM-dd');
-}
+function getTodaysDate() { return format(new Date(), 'yyyy-MM-dd'); }
+function getTomorrowsDate() { return format(addDays(new Date(), 1), 'yyyy-MM-dd'); }
 
-
-export interface GeminiResponse {
-  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "unknown";
-  payload: Partial<Task | Note | Goal | AppEvent> & { text?: string; name?: string; title?: string; content?: string; targetValue?: number; unit?: string; date?: string; description?: string; category?: Category };
-  originalCommand: string;
+export interface AiOperation {
+  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "unknown" | "clarification" | "suggestion";
+  payload: Partial<Task & Note & Goal & AppEvent & { 
+    text?: string; name?: string; title?: string; content?: string; // Basic fields
+    targetValue?: number; unit?: string; // Goal specific
+    date?: string; description?: string; // Event specific
+    dueDate?: string; // Task specific
+    category?: Category; 
+    message?: string; // For clarification/suggestion
+    recurrenceRule?: RecurrenceRule; // New
+    subTasks?: { text: string }[]; // New: text for subtasks, IDs will be generated later
+  }>;
   error?: string;
 }
 
+export interface GeminiProcessedResponse {
+  operations: AiOperation[];
+  originalCommand: string;
+  overallError?: string;
+}
 
 export async function processWithGemini(
     command: string, 
     currentCategory: Category, 
     availableCategories: Category[]
-): Promise<GeminiResponse> {
+): Promise<GeminiProcessedResponse> {
   const today = getTodaysDate();
   const tomorrow = getTomorrowsDate();
 
   const prompt = `
-    You are AYANDA, an AI assistant that helps users manage tasks, notes, goals, and events.
-    Analyze the user's command and convert it into a structured JSON object.
+    You are AYANDA, an AI assistant. Analyze the user's command and convert it into a structured JSON object.
     Today's date is ${today}. Tomorrow's date is ${tomorrow}.
 
-    The JSON object must have two fields: "action" and "payload".
-    "action" can be one of: "addTask", "addNote", "addGoal", "addEvent", or "unknown".
-    "payload" will contain the details.
+    The JSON object MUST have a field "operations" which is an ARRAY of objects. Each object in the array represents a distinct action to be taken.
+    Each operation object must have "action" and "payload" fields.
+    "action" can be: "addTask", "addNote", "addGoal", "addEvent", "clarification", "suggestion", or "unknown".
+    "payload" contains details for that action.
 
     Available categories for items are: ${availableCategories.join(", ")}.
-    If the user specifies a category, use it. If not, and the command implies a category (e.g. "work meeting", "personal reminder"), try to infer it.
-    If no category is specified or can be reasonably inferred, use the current category: "${currentCategory}". If currentCategory is "All Projects", try to pick a more specific one from the available list, or use the first available specific category if unsure.
+    If the user specifies a category, use it. If not, and the command implies a category, try to infer it.
+    If no category is specified or can be reasonably inferred for an item, use the current category: "${currentCategory}". If currentCategory is "All Projects", try to pick a more specific one from the available list for that item, or use the first available specific category if unsure.
 
-    For "addTask":
-    - "text": (string, required) The task description.
-    - "dueDate": (string, optional, YYYY-MM-DD format) Infer date if mentioned (e.g., "tomorrow", "next Monday", "Oct 28").
-    - "category": (string, required) The category for the task.
+    Field details for "payload" based on "action":
+    - "addTask":
+      - "text": (string, required) Task description.
+      - "dueDate": (string, optional, YYYY-MM-DD format) Infer date. This is the start date for recurring tasks.
+      - "category": (string, required) Category.
+      - "subTasks": (array of objects, optional) Each object: { "text": "subtask description" }.
+      - "recurrenceRule": (object, optional) With "type" ('daily', 'weekly', 'monthly', 'yearly'), "interval" (number), and optional "daysOfWeek" (array of numbers 0-6 for weekly), "dayOfMonth" (number for monthly), "endDate" (YYYY-MM-DD), "count" (number).
+    - "addNote":
+      - "title": (string, optional) Note title.
+      - "content": (string, required) Note content. Can include Markdown.
+      - "category": (string, required) Category.
+    - "addGoal":
+      - "name": (string, required) Goal name.
+      - "targetValue": (number, required) Target.
+      - "unit": (string, required) Unit.
+      - "currentValue": (number, defaults to 0) Current progress.
+      - "category": (string, required) Category.
+    - "addEvent":
+      - "title": (string, required) Event title.
+      - "date": (string, required, ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ or YYYY-MM-DDTHH:mm) Event start date & time. Default time to 12:00 PM if only date given. This is the start for recurring events.
+      - "description": (string, optional) Description.
+      - "category": (string, required) Category.
+      - "recurrenceRule": (object, optional) Same structure as for tasks.
+    - "clarification" or "suggestion":
+      - "message": (string, required) Message to display.
+    - "unknown":
+      - "error": (string, optional) Brief explanation.
+      - "message": (string, optional) General message.
 
-    For "addNote":
-    - "title": (string, optional) A title for the note. If not obvious, can be omitted or generated (e.g. "Note about X").
-    - "content": (string, required) The content of the note.
-    - "category": (string, required) The category for the note.
-
-    For "addGoal":
-    - "name": (string, required) The name of the goal.
-    - "targetValue": (number, required) The target value of the goal. If not specified, assume 100 if unit is '%', otherwise try to infer a sensible default or ask.
-    - "unit": (string, required) The unit for the goal (e.g., "km", "%", "tasks"). Infer if possible (e.g. "read 5 books" unit is "books").
-    - "currentValue": (number, defaults to 0) The current progress.
-    - "category": (string, required) The category for the goal.
-
-    For "addEvent":
-    - "title": (string, required) The title of the event.
-    - "date": (string, required, ISO 8601 format: YYYY-MM-DDTHH:mm:ss.sssZ, or at least YYYY-MM-DDTHH:mm) The date and time of the event. Infer from "tomorrow at 3pm", "Oct 28 10:00". If only date is given, default time to 12:00 PM.
-    - "description": (string, optional) Description of the event.
-    - "category": (string, required) The category for the event.
-
-    If the command is unclear or crucial information is missing for the identified action, set action to "unknown" and provide a brief explanation in the payload like {"error": "Could not determine XYZ"}.
-    Focus on extracting the core information. Be concise.
+    Infer recurrence from phrases like "every day", "weekly on Tuesdays", "monthly on the 15th", "every 2 weeks".
+    For weekly recurrence, "daysOfWeek" should be an array of numbers (Sunday=0, Monday=1, ..., Saturday=6).
+    Example: "add task to prepare slides for work due next Friday, recurring weekly"
+    {
+      "operations": [
+        { "action": "addTask", "payload": { "text": "prepare slides", "dueDate": "YYYY-MM-DD (next Friday)", "category": "Work", "recurrenceRule": {"type": "weekly", "interval": 1, "daysOfWeek": [5] } } }
+      ]
+    }
+    If the command is "task: read chapter 5 with subtasks: take notes, summarize section 1, review key terms", the subTasks array should be generated.
+    If the command is very unclear, return: { "operations": [ { "action": "unknown", "payload": { "error": "Could not understand the request." } } ] }.
 
     User Command: "${command}"
-
     JSON Output:
   `;
 
@@ -102,55 +122,60 @@ export async function processWithGemini(
         safetySettings,
     });
     const responseText = result.response.text();
-    const parsedResponse = JSON.parse(responseText) as Omit<GeminiResponse, 'originalCommand'>;
-    
-    // Post-process category if Gemini defaults to "All Projects" incorrectly
-    if (parsedResponse.payload && parsedResponse.payload.category === "All Projects" && currentCategory !== "All Projects" && availableCategories.includes(currentCategory)) {
-        parsedResponse.payload.category = currentCategory;
-    } else if (parsedResponse.payload && parsedResponse.payload.category === "All Projects" && availableCategories.length > 1 && availableCategories[1] !== "All Projects") {
-        // If Gemini chose "All Projects" and a more specific one is better
-        const firstSpecificCategory = availableCategories.find(cat => cat !== "All Projects");
-        if (firstSpecificCategory) {
-            parsedResponse.payload.category = firstSpecificCategory;
-        }
+    let parsedJson = JSON.parse(responseText);
+
+    if (!parsedJson.operations || !Array.isArray(parsedJson.operations)) {
+        console.warn("Gemini did not return operations as an array. Response:", responseText);
+        parsedJson = { operations: [ { action: "unknown", payload: { error: "AI response format error." } } ] };
     }
+    
+    const processedOperations: AiOperation[] = parsedJson.operations.map((op: any) => {
+        let { action, payload } = op;
+        if (!payload) payload = {};
 
-
-    // Ensure dueDate for tasks is YYYY-MM-DD if provided, otherwise undefined.
-    if (parsedResponse.action === "addTask" && parsedResponse.payload.dueDate) {
-        try {
-            // Attempt to parse and reformat. This handles various date strings Gemini might produce.
-            const parsedDate = parseISO(parsedResponse.payload.dueDate as string); // Try ISO first
-            parsedResponse.payload.dueDate = format(parsedDate, 'yyyy-MM-dd');
-        } catch (e) {
-            // If parsing fails, it might be already YYYY-MM-DD or an invalid date from Gemini
-            // Basic check for YYYY-MM-DD format
-            if (!/^\d{4}-\d{2}-\d{2}$/.test(parsedResponse.payload.dueDate as string)) {
-                 console.warn("Gemini returned an unparseable dueDate:", parsedResponse.payload.dueDate);
-                 // delete parsedResponse.payload.dueDate; // Or set to undefined
+        // Post-process category
+        if ((payload.category === "All Projects" || !payload.category) && action !== 'clarification' && action !== 'suggestion' && action !== 'unknown') {
+            if (currentCategory !== "All Projects" && availableCategories.includes(currentCategory)) {
+                payload.category = currentCategory;
+            } else {
+                const firstSpecificCategory = availableCategories.find(cat => cat !== "All Projects");
+                payload.category = firstSpecificCategory || (availableCategories.length > 0 ? availableCategories[0] : "Personal Life"); // Fallback
             }
         }
-    }
-    // Ensure date for events is ISO string if provided.
-     if (parsedResponse.action === "addEvent" && parsedResponse.payload.date) {
-        try {
-            const parsedDate = parseISO(parsedResponse.payload.date as string);
-            parsedResponse.payload.date = parsedDate.toISOString();
-        } catch (e) {
-            console.warn("Gemini returned an unparseable event date:", parsedResponse.payload.date);
-             // delete parsedResponse.payload.date; // Or set to undefined
+        
+        // Validate/format dates
+        if (action === "addTask" && payload.dueDate) {
+            try {
+                const parsedDate = parseISO(payload.dueDate as string);
+                payload.dueDate = isValid(parsedDate) ? format(parsedDate, 'yyyy-MM-dd') : undefined;
+            } catch (e) { payload.dueDate = undefined; }
         }
-    }
+        if (action === "addEvent" && payload.date) {
+            try {
+                const parsedEventDate = parseISO(payload.date as string);
+                payload.date = isValid(parsedEventDate) ? parsedEventDate.toISOString() : undefined;
+            } catch (e) { payload.date = undefined; }
+        }
+        // Validate recurrenceRule dates
+        if (payload.recurrenceRule?.endDate) {
+            try {
+                const parsedEndDate = parseISO(payload.recurrenceRule.endDate as string);
+                payload.recurrenceRule.endDate = isValid(parsedEndDate) ? format(parsedEndDate, 'yyyy-MM-dd') : undefined;
+            } catch (e) { if (payload.recurrenceRule) payload.recurrenceRule.endDate = undefined; }
+        }
 
+        return { action, payload, error: op.error };
+    });
 
-    return { ...parsedResponse, originalCommand: command };
+    return { operations: processedOperations, originalCommand: command };
 
   } catch (error) {
     console.error("Error processing with Gemini:", error);
+    const errorMessage = `Gemini API error or JSON parsing issue: ${(error as Error).message}`;
     return {
-      action: "unknown",
-      payload: { error: `Gemini API error: ${(error as Error).message}` },
+      operations: [{ action: "unknown", payload: { error: errorMessage } }],
       originalCommand: command,
+      overallError: errorMessage
     };
   }
 }

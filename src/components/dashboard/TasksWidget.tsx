@@ -8,20 +8,23 @@ interface TasksWidgetProps {
   tasks: Task[];
   onTaskToggle: (taskId: string) => void;
   onNavigate: () => void;
+  className?: string; // Add className prop
 }
 
-export function TasksWidget({ tasks, onTaskToggle, onNavigate }: TasksWidgetProps) {
-  const displayedTasks = tasks.filter(t => !t.completed).slice(0, 7); // Show more tasks if it's taller
+export function TasksWidget({ tasks, onTaskToggle, onNavigate, className }: TasksWidgetProps) {
+  const displayedTasks = tasks.filter(t => !t.completed).slice(0, 10); // Show a few more tasks
 
   return (
     <DashboardCardWrapper 
         title="TASKS" 
         onNavigate={onNavigate} 
-        // Approximate height for 2 rows: (Widget height (300px) * 2) + gap (20px) = ~620px
-        // Or use a relative unit that works with the grid's row definition
-        className="min-h-[calc(var(--widget-base-height,300px)*2+var(--grid-gap,1.25rem))] flex flex-col" // Target height
+        // The height is now more dynamic due to flex layout with AiAssistantWidget
+        className={cn(
+            "flex flex-col", // Ensure it's a flex container to allow content to grow
+            className // Apply passed className (e.g., flex-grow)
+        )} 
         id="tasks-widget-summary"
-        contentClassName="space-y-2 flex-grow" // flex-grow to use available space
+        contentClassName="space-y-2 flex-grow" // flex-grow for the content area within the card
     >
       {displayedTasks.length > 0 ? (
         <ul className="space-y-2">
@@ -60,3 +63,4 @@ export function TasksWidget({ tasks, onTaskToggle, onNavigate }: TasksWidgetProp
     </DashboardCardWrapper>
   );
 }
+

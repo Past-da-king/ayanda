@@ -2,11 +2,12 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react'; 
-import { useRouter } from 'next/navigation'; 
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'; 
 
 import { Header } from '@/components/layout/Header';
 import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
 import { FooterChat } from '@/components/layout/FooterChat';
+import { AiAssistantWidget } from '@/components/dashboard/AiAssistantWidget';
 import { TasksWidget } from '@/components/dashboard/TasksWidget';
 import { CalendarWidget } from '@/components/dashboard/CalendarWidget';
 import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
@@ -16,8 +17,9 @@ import { TasksView } from '@/components/views/TasksView';
 import { GoalsView } from '@/components/views/GoalsView';
 import { NotesView } from '@/components/views/NotesView';
 import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenView';
-import { Task, Goal, Note, Event as AppEvent, ViewMode, Category } from '@/types';
+import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
 import { cn } from '@/lib/utils';
+import { v4 as uuidv4 } from 'uuid'; // For client-side ID generation for subtasks
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
@@ -25,6 +27,9 @@ const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvail
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const pathname = usePathname(); // Use usePathname
+  const searchParams = useSearchParams();
+
 
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   
@@ -35,23 +40,34 @@ export default function HomePage() {
   
   const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
 
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>([]);
-  const [filteredGoals, setFilteredGoals] = useState<Goal[]>([]);
-  const [filteredNotes, setFilteredNotes] = useState<Note[]>([]);
-  const [filteredEvents, setFilteredEvents] = useState<AppEvent[]>([]);
+  // Filtered states are not strictly necessary if filtering happens directly in child components or renderView
+  // But keeping them can be useful if multiple components need the same filtered list.
+  // For simplicity here, we'll filter directly where needed or pass all data.
 
   const [isLoading, setIsLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
+  const [aiMessage, setAiMessage] = useState<string | null>(null);
+
+  // Handle deep linking or navigation to specific views/items from search or other sources
+  useEffect(() => {
+    const view = searchParams.get('view') as ViewMode | null;
+    // const itemId = searchParams.get('id'); // Could be used to highlight/scroll to item
+    if (view && ['tasks', 'goals', 'notes', 'calendar'].includes(view)) {
+      setViewMode(view);
+      // Potentially clear search params after use
+      // router.replace(pathname, undefined); // Next 13 way to clear query params
+    }
+  }, [searchParams, router, pathname]);
 
 
   useEffect(() => {
     if (status === "loading") return; 
     if (!session && status === "unauthenticated") {
-      router.replace('/login?callbackUrl=/'); 
+      router.replace(`/login?callbackUrl=${pathname}`); 
     } else if (session && status === "authenticated" && !initialLoadDone) {
       setInitialLoadDone(true); 
     }
-  }, [session, status, router, initialLoadDone]);
+  }, [session, status, router, initialLoadDone, pathname]);
 
 
   const fetchData = useCallback(async (categorySignal?: Category) => {
@@ -69,15 +85,13 @@ export default function HomePage() {
         fetch(`/api/events${queryCategory}`),
       ]);
 
-      if (!tasksRes.ok || !goalsRes.ok || !notesRes.ok || !eventsRes.ok) {
-        console.error('Failed to fetch data:', { 
-            tasks: tasksRes.statusText, 
-            goals: goalsRes.statusText,
-            notes: notesRes.statusText,
-            events: eventsRes.statusText
-        });
-        setTasks([]); setGoals([]); setNotes([]); setEvents([]);
-      } else {
+      // Basic error check
+      const checkOk = (res: Response, name: string) => {
+          if(!res.ok) console.error(`Failed to fetch ${name}: ${res.status} ${res.statusText}`);
+          return res.ok;
+      }
+      
+      if (checkOk(tasksRes, 'tasks') && checkOk(goalsRes, 'goals') && checkOk(notesRes, 'notes') && checkOk(eventsRes, 'events')) {
         const tasksData = await tasksRes.json();
         const goalsData = await goalsRes.json();
         const notesData = await notesRes.json();
@@ -87,10 +101,15 @@ export default function HomePage() {
         setGoals(goalsData);
         setNotes(notesData);
         setEvents(eventsData);
+      } else {
+         setAiMessage("Error fetching some data. Dashboard might be incomplete.");
+         // Keep stale data or clear, depending on preference
+         // setTasks([]); setGoals([]); setNotes([]); setEvents([]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
-      setTasks([]); setGoals([]); setNotes([]); setEvents([]);
+      setAiMessage("Network error fetching data.");
+      // setTasks([]); setGoals([]); setNotes([]); setEvents([]);
     } finally {
       setIsLoading(false);
     }
@@ -102,28 +121,19 @@ export default function HomePage() {
     }
   }, [fetchData, initialLoadDone, status]); 
 
-  useEffect(() => {
-    const isAllProjects = currentCategory === "All Projects";
-    setFilteredTasks(
-        tasks
-            .filter(t => isAllProjects || t.category === currentCategory)
-            .sort((a,b) => (a.completed ? 1 : -1) || (a.dueDate && b.dueDate ? new Date(a.dueDate+"T00:00:00Z").getTime() - new Date(b.dueDate+"T00:00:00Z").getTime() : (a.dueDate ? -1 : (b.dueDate ? 1 : 0))))
-    );
-    setFilteredGoals(goals.filter(g => isAllProjects || g.category === currentCategory));
-    setFilteredNotes(notes.filter(n => isAllProjects || n.category === currentCategory).sort((a,b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime()));
-    setFilteredEvents(events.filter(e => isAllProjects || e.category === currentCategory));
-  }, [tasks, goals, notes, events, currentCategory]);
 
-
-  const handleAddTask = async (text: string, dueDate: string | undefined, category: Category) => {
+  // Handlers for CRUD operations
+  const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed'>) => {
     if (status !== "authenticated") return;
-    const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/tasks', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, dueDate, category: effectiveCategory }),
+      body: JSON.stringify(taskData),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) {
+        fetchData(currentCategory);
+        setAiMessage(`Task "${taskData.text.substring(0,30)}..." added.`);
+    } else { setAiMessage(`Failed to add task.`); }
   };
 
   const handleToggleTask = async (taskId: string) => {
@@ -136,147 +146,157 @@ export default function HomePage() {
       body: JSON.stringify({ completed: !task.completed }),
     });
     if (res.ok) fetchData(currentCategory);
+    else setAiMessage("Failed to toggle task.");
   };
 
   const handleDeleteTask = async (taskId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Task deleted.`); } 
+    else { setAiMessage(`Failed to delete task.`); }
   };
   
-  const handleUpdateTask = async (taskId: string, newText: string, newDueDate?: string, newCategory?: Category) => {
+  const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id'>>) => {
     if (status !== "authenticated") return;
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
     const res = await fetch(`/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: newText, dueDate: newDueDate, category: newCategory || task.category }),
+      body: JSON.stringify(taskUpdateData),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Task updated.`); } 
+    else { setAiMessage(`Failed to update task.`); }
   };
 
   const handleAddGoal = async (name: string, targetValue: number, unit: string, category: Category) => {
     if (status !== "authenticated") return;
-    const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/goals', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, currentValue: 0, targetValue, unit, category: effectiveCategory }),
+      body: JSON.stringify({ name, currentValue: 0, targetValue, unit, category }),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Goal "${name.substring(0,30)}..." added.`); } 
+    else { setAiMessage(`Failed to add goal.`); }
   };
 
-  const handleUpdateGoal = async (goalId: string, currentValue?: number, name?: string, targetValue?: number, unit?: string, category?: Category) => {
+  const handleUpdateGoal = async (goalId: string, currentValue?: number, name?: string, targetValue?: number, unit?: string, categoryProp?: Category) => {
     if (status !== "authenticated") return;
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
-
-    const currentTgt = targetValue ?? goal.targetValue;
-    const updatedCurrentValue = currentValue !== undefined ? Math.max(0, Math.min(currentValue, currentTgt)) : goal.currentValue;
+    const payload: any = { name: name ?? goal.name, unit: unit ?? goal.unit, category: categoryProp ?? goal.category };
+    if(targetValue !== undefined) payload.targetValue = targetValue; else payload.targetValue = goal.targetValue;
+    if(currentValue !== undefined) payload.currentValue = Math.max(0, Math.min(currentValue, payload.targetValue)); else payload.currentValue = goal.currentValue;
 
     const res = await fetch(`/api/goals/${goalId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ 
-          currentValue: updatedCurrentValue, 
-          name: name ?? goal.name, 
-          targetValue: currentTgt, 
-          unit: unit ?? goal.unit, 
-          category: category ?? goal.category 
-      }),
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Goal updated.`); } 
+    else { setAiMessage(`Failed to update goal.`); }
   };
 
   const handleDeleteGoal = async (goalId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/goals/${goalId}`, { method: 'DELETE' });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Goal deleted.`); } 
+    else { setAiMessage(`Failed to delete goal.`); }
   };
   
   const handleAddNote = async (title: string | undefined, content: string, category: Category) => {
     if (status !== "authenticated") return;
-    const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/notes', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, content, category: effectiveCategory }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category }),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Note "${(title || content).substring(0,20)}..." added.`); } 
+    else { setAiMessage(`Failed to add note.`); }
   };
 
-  const handleUpdateNote = async (noteId: string, title: string | undefined, content: string, category?: Category) => {
+  const handleUpdateNote = async (noteId: string, title: string | undefined, content: string, categoryProp?: Category) => {
      if (status !== "authenticated") return;
      const note = notes.find(n => n.id === noteId);
      if (!note) return;
     const res = await fetch(`/api/notes/${noteId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, content, category: category || note.category }),
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category: categoryProp || note.category }),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Note updated.`); } 
+    else { setAiMessage(`Failed to update note.`); }
   };
 
   const handleDeleteNote = async (noteId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Note deleted.`); } 
+    else { setAiMessage(`Failed to delete note.`); }
   };
 
-  const handleAddEvent = async (title: string, date: string, category: Category, description?: string) => {
+  const handleAddEvent = async (eventData: Omit<AppEvent, 'id'>) => {
     if (status !== "authenticated") return;
-    const effectiveCategory = (category === "All Projects" || !baseAvailableCategories.includes(category)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : category;
     const res = await fetch('/api/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, date, category: effectiveCategory, description }),
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventData),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Event "${eventData.title.substring(0,30)}..." added.`); } 
+    else { setAiMessage(`Failed to add event.`); }
   };
   
-  const handleUpdateEvent = async (eventId: string, title: string, date: string, category: Category, description?: string) => {
+  const handleUpdateEvent = async (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id'>>) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/events/${eventId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title, date, category, description }),
+      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventUpdateData),
     });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Event updated.`); } 
+    else { setAiMessage(`Failed to update event.`); }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
-    if (res.ok) fetchData(currentCategory);
+    if (res.ok) { fetchData(currentCategory); setAiMessage(`Event deleted.`); } 
+    else { setAiMessage(`Failed to delete event.`); }
   };
 
   const handleAiInputCommand = async (command: string) => {
     if (status !== "authenticated") return;
+    setIsLoading(true); 
+    setAiMessage(`AIDA is processing your command...`); 
+
     const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ command, currentCategory }),
     });
+    
+    setIsLoading(false); // Moved setIsLoading to before fetchData
     if (res.ok) {
         const result = await res.json();
-        console.log("AI Command result:", result);
+        setAiMessage(result.message || "AI command processed.");
         fetchData(currentCategory); 
     } else {
-        const errorResult = await res.json();
-        console.error("AI Command failed:", errorResult);
+        const errorResult = await res.json().catch(() => ({message: "AI command failed with an unknown error."})); // Add catch for non-JSON error response
+        setAiMessage(errorResult.message || "AI command failed.");
     }
   };
 
   const onCategoryChange = (category: Category) => {
     setCurrentCategory(category);
+    setAiMessage(null); 
+  };
+
+  const navigateToItemHandler = (type: 'tasks' | 'calendar' | 'notes' | 'goals', id: string) => {
+    setViewMode(type);
+    // Future: Could scroll to specific item ID within the view.
+    // For now, just opening the view is sufficient.
   };
 
   const renderView = () => {
     const commonViewProps = {
         categories: baseAvailableCategories,
         currentCategory: (currentCategory === "All Projects" || !baseAvailableCategories.includes(currentCategory)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : currentCategory,
-        onClose: () => setViewMode('dashboard'),
+        onClose: () => { setViewMode('dashboard'); setAiMessage(null); },
+    };
+    
+    const dashboardDataProps = {
+      tasks: tasks.filter(t => currentCategory === "All Projects" || t.category === currentCategory),
+      goals: goals.filter(g => currentCategory === "All Projects" || g.category === currentCategory),
+      notes: notes.filter(n => currentCategory === "All Projects" || n.category === currentCategory).sort((a,b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime()),
+      events: events.filter(e => currentCategory === "All Projects" || e.category === currentCategory),
     };
     
     switch (viewMode) {
@@ -290,24 +310,35 @@ export default function HomePage() {
         return <CalendarFullScreenView {...commonViewProps} events={events} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} onDeleteEvent={handleDeleteEvent} />;
       case 'dashboard':
       default:
-        if (isLoading || status === "loading") {
+        if (isLoading && !initialLoadDone) { // Show loading only on initial full load
             return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
         }
         if (status === "unauthenticated") { 
             return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Redirecting to login...</p></div>;
         }
         return (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
-            <div className="lg:row-span-2">
-                <TasksWidget tasks={filteredTasks} onTaskToggle={handleToggleTask} onNavigate={() => setViewMode('tasks')} />
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
+              <div className="lg:row-span-2 flex flex-col gap-5 md:gap-6">
+                <AiAssistantWidget message={aiMessage} />
+                <TasksWidget 
+                    tasks={dashboardDataProps.tasks} 
+                    onTaskToggle={handleToggleTask} 
+                    onNavigate={() => setViewMode('tasks')} 
+                    className="flex-grow"
+                />
+              </div>
+              <div className="flex flex-col space-y-5 md:space-y-6">
+                <CalendarWidget events={dashboardDataProps.events} onNavigate={() => setViewMode('calendar')} />
+                <DueSoonWidget 
+                    tasks={tasks} // Pass all tasks for DueSoon to filter internally based on its logic
+                    events={events} // Pass all events
+                    currentProjectId={currentCategory === "All Projects" ? null : currentCategory} 
+                    onNavigateToItem={navigateToItemHandler}
+                />
+              </div>
+              <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => setViewMode('goals')} />
+              <QuickNotesWidget notes={dashboardDataProps.notes} onNavigate={() => setViewMode('notes')} />
             </div>
-            <div className="flex flex-col space-y-5 md:space-y-6">
-              <CalendarWidget events={filteredEvents} onNavigate={() => setViewMode('calendar')} />
-              <DueSoonWidget tasks={tasks} events={events} currentProjectId={currentCategory === "All Projects" ? null : currentCategory} />
-            </div>
-            <GoalsWidget goals={filteredGoals} onNavigate={() => setViewMode('goals')} />
-            <QuickNotesWidget notes={filteredNotes} onNavigate={() => setViewMode('notes')} />
-          </div>
         );
     }
   };
@@ -316,26 +347,24 @@ export default function HomePage() {
     return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> {/* Adjusted gap */}
+            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> 
                 <p className="text-xl accent-text">Initializing AYANDA...</p>
             </main>
         </div>
     );
   }
-  if (status === "unauthenticated" && (router.pathname === "/" || !["/login", "/register", "/landing"].includes(router.pathname))) {
+  if (status === "unauthenticated" && (pathname === "/" || !["/login", "/register", "/landing"].includes(pathname))) {
      return (
         <div className="flex flex-col min-h-screen">
             <Header />
-            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> {/* Adjusted gap */}
+            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> 
                 <p className="text-xl accent-text">Redirecting to login...</p>
             </main>
         </div>
      );
   }
 
-  const { pathname } = typeof window !== "undefined" ? window.location : { pathname: "/" };
   const showProjectBar = status === "authenticated" && !["/login", "/register", "/landing"].includes(pathname);
-
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -350,10 +379,9 @@ export default function HomePage() {
       <main 
         className={cn(
             "flex-grow px-6 pb-24",
-            // Adjust top padding based on whether project bar is shown
-            // 5rem (Header) + ~2.875rem (ProjectSelectorBar height from py-3 & content) + 0.75rem (desired gap)
-            showProjectBar && viewMode === 'dashboard' ? "pt-[calc(5rem+2.875rem+0.75rem)]" : 
-            (viewMode === 'dashboard' ? "pt-[calc(5rem+0.75rem)]" : "pt-0")
+             // Adjust top padding based on whether project bar and view mode
+            viewMode !== 'dashboard' ? "pt-[5rem]" : // Fullscreen views have their own internal top padding
+            showProjectBar ? "pt-[calc(5rem+2.875rem+1.5rem)]" : "pt-[calc(5rem+1.5rem)]"
         )}
       >
         {renderView()}
