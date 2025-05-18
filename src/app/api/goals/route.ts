@@ -3,13 +3,23 @@ import dbConnect from '@/lib/mongodb';
 import GoalModel, { IGoal } from '@/models/GoalModel';
 import { Goal } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { getToken } from 'next-auth/jwt';
 
 export async function GET(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = token.id as string;
+
   await dbConnect();
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   try {
-    const query = category && category !== "All Projects" ? { category } : {};
+    const query: any = { userId }; // Always filter by userId
+    if (category && category !== "All Projects") {
+      query.category = category;
+    }
     const goals: IGoal[] = await GoalModel.find(query).sort({ createdAt: -1 });
     return NextResponse.json(goals, { status: 200 });
   } catch (error) {
@@ -19,12 +29,23 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = token.id as string;
+
   await dbConnect();
   try {
-    const body: Omit<Goal, 'id'> = await request.json();
+    const body: Omit<Goal, 'id' | 'userId'> = await request.json();
      const newGoalData: Goal = {
         id: uuidv4(),
-        ...body,
+        userId: userId,
+        name: body.name,
+        currentValue: body.currentValue,
+        targetValue: body.targetValue,
+        unit: body.unit,
+        category: body.category,
     };
     const goal: IGoal = new GoalModel(newGoalData);
     await goal.save();
@@ -34,3 +55,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to create goal', error: (error as Error).message }, { status: 500 });
   }
 }
+

@@ -22,13 +22,13 @@ const SubTaskSchema = new Schema<SubTask>({
 const TaskSchema: Schema<ITask> = new Schema(
   {
     id: { type: String, required: true, unique: true },
+    userId: { type: String, required: true, index: true }, // Added
     text: { type: String, required: true },
     completed: { type: Boolean, required: true, default: false },
     dueDate: { type: String, required: false }, // YYYY-MM-DD format
     category: { type: String, required: true },
     recurrenceRule: { type: RecurrenceRuleSchema, required: false },
     subTasks: { type: [SubTaskSchema], required: false, default: [] },
-    // nextDueDate: { type: String, required: false }, // Consider if this needs to be stored
   },
   {
     timestamps: true, // Adds createdAt and updatedAt
@@ -38,3 +38,4 @@ const TaskSchema: Schema<ITask> = new Schema(
 const TaskModel: Model<ITask> = mongoose.models.Task || mongoose.model<ITask>('Task', TaskSchema);
 
 export default TaskModel;
+

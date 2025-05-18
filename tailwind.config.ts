@@ -66,7 +66,7 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       // Add typography for react-markdown
-      typography: (theme: (path: string) => any) => ({
+      typography: ({ theme }: { theme: (path: string, defaultValue?: any) => any }) => ({
         DEFAULT: {
           css: {
             color: theme('colors.foreground'),

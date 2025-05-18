@@ -16,13 +16,13 @@ const RecurrenceRuleSchema = new Schema<RecurrenceRule>({
 const EventSchema: Schema<IEvent> = new Schema(
   {
     id: { type: String, required: true, unique: true },
+    userId: { type: String, required: true, index: true }, // Added
     title: { type: String, required: true },
     date: { type: String, required: true }, // ISO string
     duration: { type: Number, required: false }, // in minutes
     description: { type: String, required: false },
     category: { type: String, required: true },
     recurrenceRule: { type: RecurrenceRuleSchema, required: false },
-    // nextEventDate: { type: String, required: false }, // Consider if this needs to be stored
   },
   {
     timestamps: true,
@@ -32,3 +32,4 @@ const EventSchema: Schema<IEvent> = new Schema(
 const EventModel: Model<IEvent> = mongoose.models.Event || mongoose.model<IEvent>('Event', EventSchema);
 
 export default EventModel;
+

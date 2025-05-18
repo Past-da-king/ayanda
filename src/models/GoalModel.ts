@@ -6,6 +6,7 @@ export interface IGoal extends GoalType, Document {}
 const GoalSchema: Schema<IGoal> = new Schema(
   {
     id: { type: String, required: true, unique: true },
+    userId: { type: String, required: true, index: true }, // Added
     name: { type: String, required: true },
     currentValue: { type: Number, required: true, default: 0 },
     targetValue: { type: Number, required: true },
@@ -20,3 +21,4 @@ const GoalSchema: Schema<IGoal> = new Schema(
 const GoalModel: Model<IGoal> = mongoose.models.Goal || mongoose.model<IGoal>('Goal', GoalSchema);
 
 export default GoalModel;
+

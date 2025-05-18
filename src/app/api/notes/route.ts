@@ -3,13 +3,23 @@ import dbConnect from '@/lib/mongodb';
 import NoteModel, { INote } from '@/models/NoteModel';
 import { Note } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
+import { getToken } from 'next-auth/jwt';
 
 export async function GET(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = token.id as string;
+
   await dbConnect();
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   try {
-    const query = category && category !== "All Projects" ? { category } : {};
+    const query: any = { userId }; // Always filter by userId
+    if (category && category !== "All Projects") {
+      query.category = category;
+    }
     const notes: INote[] = await NoteModel.find(query).sort({ lastEdited: -1 });
     return NextResponse.json(notes, { status: 200 });
   } catch (error) {
@@ -19,12 +29,21 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = token.id as string;
+
   await dbConnect();
   try {
-    const body: Omit<Note, 'id' | 'lastEdited'> = await request.json();
+    const body: Omit<Note, 'id' | 'lastEdited' | 'userId'> = await request.json();
     const newNoteData: Note = {
         id: uuidv4(),
-        ...body,
+        userId: userId,
+        title: body.title,
+        content: body.content,
+        category: body.category,
         lastEdited: new Date().toISOString(),
     };
     const note: INote = new NoteModel(newNoteData);
@@ -35,3 +54,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to create note', error: (error as Error).message }, { status: 500 });
   }
 }
+

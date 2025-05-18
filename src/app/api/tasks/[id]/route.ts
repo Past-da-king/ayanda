@@ -1,43 +1,47 @@
 import { NextRequest, NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
-import TaskModel from '@/models/TaskModel'; // Removed ITask as it's inferred
+import TaskModel from '@/models/TaskModel';
 import { Task, SubTask, RecurrenceRule } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import mongoose from 'mongoose';
-
+import { getToken } from 'next-auth/jwt';
 
 interface Params {
   id: string;
 }
 
 export async function PUT(request: NextRequest, { params }: { params: Params }) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userIdAuth = token.id as string;
+
   await dbConnect();
   const { id } = params;
   try {
-    const body: Partial<Omit<Task, 'id'>> & { subTasks?: SubTask[], recurrenceRule?: RecurrenceRule } = await request.json();
+    const body: Partial<Omit<Task, 'id' | 'userId'>> & { subTasks?: SubTask[], recurrenceRule?: RecurrenceRule } = await request.json();
 
-    // Ensure subTasks have IDs if provided
+    const updatePayload: any = { ...body };
+    
     if (body.subTasks) {
-      body.subTasks = body.subTasks.map(sub => ({
+      updatePayload.subTasks = body.subTasks.map(sub => ({
         ...sub,
-        id: sub.id || uuidv4(), // Assign new ID if missing, useful if adding new subtasks during update
+        id: sub.id || uuidv4(),
       }));
     }
     
-    // If recurrenceRule is explicitly set to null or undefined by client to remove it
-    const updatePayload: any = { ...body };
     if (body.hasOwnProperty('recurrenceRule') && !body.recurrenceRule) {
         updatePayload.$unset = { recurrenceRule: "" };
         delete updatePayload.recurrenceRule;
     }
-    if (body.hasOwnProperty('subTasks') && body.subTasks === null) { // Allow clearing subtasks
+    if (body.hasOwnProperty('subTasks') && body.subTasks === null) {
       updatePayload.subTasks = [];
     }
 
-
-    const updatedTask = await TaskModel.findOneAndUpdate({ id: id }, updatePayload, { new: true, runValidators: true });
+    const updatedTask = await TaskModel.findOneAndUpdate({ id: id, userId: userIdAuth }, updatePayload, { new: true, runValidators: true });
     if (!updatedTask) {
-      return NextResponse.json({ message: 'Task not found' }, { status: 404 });
+      return NextResponse.json({ message: 'Task not found or you do not have permission to update it.' }, { status: 404 });
     }
     return NextResponse.json(updatedTask, { status: 200 });
   } catch (error) {
@@ -50,12 +54,18 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
 }
 
 export async function DELETE(request: NextRequest, { params }: { params: Params }) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userIdAuth = token.id as string;
+
   await dbConnect();
   const { id } = params;
   try {
-    const deletedTask = await TaskModel.findOneAndDelete({ id: id });
+    const deletedTask = await TaskModel.findOneAndDelete({ id: id, userId: userIdAuth });
     if (!deletedTask) {
-      return NextResponse.json({ message: 'Task not found' }, { status: 404 });
+      return NextResponse.json({ message: 'Task not found or you do not have permission to delete it.' }, { status: 404 });
     }
     return NextResponse.json({ message: 'Task deleted successfully' }, { status: 200 });
   } catch (error) {
@@ -63,3 +73,4 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     return NextResponse.json({ message: `Failed to delete task ${id}`, error: (error as Error).message }, { status: 500 });
   }
 }
+

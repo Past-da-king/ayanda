@@ -7,10 +7,17 @@ import TaskModel from '@/models/TaskModel';
 import NoteModel from '@/models/NoteModel';
 import GoalModel from '@/models/GoalModel';
 import EventModel from '@/models/EventModel';
+import { getToken } from 'next-auth/jwt';
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 
 export async function POST(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized for AI command' }, { status: 401 });
+  }
+  const userId = token.id as string;
+
   await dbConnect();
   try {
     const { command, currentCategory } = await request.json();
@@ -44,10 +51,14 @@ export async function POST(request: NextRequest) {
             itemSummary = operation.payload.text.substring(0, 30);
             const newTaskData: Task = {
               id: uuidv4(),
+              userId: userId, // Assign userId
               text: operation.payload.text!,
               completed: false,
               dueDate: operation.payload.dueDate as string | undefined,
               category: effectiveCategory as Category,
+              recurrenceRule: operation.payload.recurrenceRule,
+              subTasks: operation.payload.subTasks?.map(st => ({...st, id: uuidv4(), completed: false})), // Add id and completed to subtasks
+              createdAt: new Date().toISOString(),
             };
             const createdTask = new TaskModel(newTaskData);
             await createdTask.save();
@@ -59,6 +70,7 @@ export async function POST(request: NextRequest) {
             itemSummary = operation.payload.title || operation.payload.content.substring(0, 30);
             const newNoteData: Note = {
               id: uuidv4(),
+              userId: userId, // Assign userId
               title: operation.payload.title as string | undefined,
               content: operation.payload.content!,
               category: effectiveCategory as Category,
@@ -76,6 +88,7 @@ export async function POST(request: NextRequest) {
             itemSummary = operation.payload.name.substring(0, 30);
             const newGoalData: Goal = {
               id: uuidv4(),
+              userId: userId, // Assign userId
               name: operation.payload.name!,
               currentValue: (operation.payload as Goal).currentValue || 0,
               targetValue: operation.payload.targetValue!,
@@ -94,10 +107,12 @@ export async function POST(request: NextRequest) {
             itemSummary = operation.payload.title.substring(0, 30);
             const newEventData: AppEvent = {
                 id: uuidv4(),
+                userId: userId, // Assign userId
                 title: operation.payload.title!,
                 date: operation.payload.date!,
                 description: operation.payload.description as string | undefined,
                 category: effectiveCategory as Category,
+                recurrenceRule: operation.payload.recurrenceRule,
             };
             const createdEvent = new EventModel(newEventData);
             await createdEvent.save();
@@ -107,10 +122,7 @@ export async function POST(request: NextRequest) {
           case 'clarification':
           case 'suggestion':
             if (operation.payload.message) {
-              // If there's only one operation and it's a clarification/suggestion, this becomes the main message.
-              // If there are other successful operations, this might be appended or prioritized.
               aiMessageForCard = operation.payload.message;
-              // We don't add to createdItemsInfo unless it's the *only* thing.
               if (geminiResult.operations.length === 1) {
                  createdItemsInfo.push({ type: operation.action, summary: operation.payload.message, success: true});
               }
@@ -142,7 +154,7 @@ export async function POST(request: NextRequest) {
         if (failures.length > 0) {
             responseMessage += "Some operations failed: " + failures.map(f => `${f.type} (${f.error || 'Unknown error'})`).join('. ') + ".";
         }
-    } else if (aiMessageForCard) { // Only from clarification/suggestion and it was the sole operation
+    } else if (aiMessageForCard) {
         responseMessage = aiMessageForCard;
     }
      else if (!hasErrors) {
@@ -151,16 +163,15 @@ export async function POST(request: NextRequest) {
         responseMessage = "Could not fully process your command.";
     }
     
-    if (responseMessage.trim() === "") { // Fallback
+    if (responseMessage.trim() === "") {
         responseMessage = hasErrors ? "There were issues processing your command." : "Command received.";
     }
-
 
     return NextResponse.json({ 
         message: responseMessage.trim(), 
         details: createdItemsInfo, 
         originalCommand: command 
-    }, { status: hasErrors && createdItemsInfo.filter(i=>i.success).length === 0 ? 422 : 200 }); // 200 if at least one success, 422 if all failed
+    }, { status: hasErrors && createdItemsInfo.filter(i=>i.success).length === 0 ? 422 : 200 });
 
   } catch (error) {
     console.error('Error in AI command processing API:', error);

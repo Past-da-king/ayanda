@@ -18,17 +18,19 @@ export interface SubTask {
 
 export interface Task {
   id: string;
+  userId: string; // Added for user ownership
   text: string;
   completed: boolean;
   dueDate?: string; // YYYY-MM-DD format (start date for recurring)
   category: string;
   recurrenceRule?: RecurrenceRule;
   subTasks?: SubTask[];
-  // nextDueDate?: string; // Optional: Can be calculated on the fly or stored for performance
+  createdAt?: string; // Added for sorting consistency
 }
 
 export interface Goal {
   id: string;
+  userId: string; // Added for user ownership
   name: string;
   currentValue: number;
   targetValue: number;
@@ -38,6 +40,7 @@ export interface Goal {
 
 export interface Note {
   id: string;
+  userId: string; // Added for user ownership
   title?: string;
   content: string; // Will store Markdown content
   category: string;
@@ -46,13 +49,13 @@ export interface Note {
 
 export interface Event {
   id:string;
+  userId: string; // Added for user ownership
   title: string;
   date: string; // ISO string for the event's date and time (start date/time for recurring)
   duration?: number; // in minutes
   description?: string;
   category: string;
   recurrenceRule?: RecurrenceRule;
-  // nextEventDate?: string; // Optional: Can be calculated
 }
 
 
@@ -77,3 +80,4 @@ export interface SearchResultItem {
   contentPreview?: string;
   path: string; // To navigate to the item
 }
+

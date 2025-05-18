@@ -6,6 +6,7 @@ export interface INote extends NoteType, Document {}
 const NoteSchema: Schema<INote> = new Schema(
   {
     id: { type: String, required: true, unique: true },
+    userId: { type: String, required: true, index: true }, // Added
     title: { type: String, required: false },
     content: { type: String, required: true },
     category: { type: String, required: true },
@@ -19,3 +20,4 @@ const NoteSchema: Schema<INote> = new Schema(
 const NoteModel: Model<INote> = mongoose.models.Note || mongoose.model<INote>('Note', NoteSchema);
 
 export default NoteModel;
+
