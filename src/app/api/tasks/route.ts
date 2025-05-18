@@ -18,12 +18,12 @@ export async function GET(request: NextRequest) {
   const category = searchParams.get('category');
 
   try {
-    const query: any = { userId }; // Always filter by userId
+    const query: any = { userId };
     if (category && category !== "All Projects") {
       query.category = category;
     }
     const tasks: ITask[] = await TaskModel.find(query).sort({ dueDate: 1, createdAt: -1 });
-    return NextResponse.json(tasks, { status: 200 });
+    return NextResponse.json(tasks, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Failed to fetch tasks:', error);
     return NextResponse.json({ message: 'Failed to fetch tasks', error: (error as Error).message }, { status: 500 });
@@ -39,22 +39,27 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   try {
-    const body: Omit<Task, 'id' | 'completed' | 'userId'> & { subTasks?: SubTask[], recurrenceRule?: RecurrenceRule } = await request.json();
+    const body: Omit<Task, 'id' | 'completed' | 'userId' | 'createdAt'> & { subTasks?: Partial<SubTask>[], recurrenceRule?: RecurrenceRule } = await request.json();
     
-    const newSubTasks = (body.subTasks || []).map(sub => ({ ...sub, id: sub.id || uuidv4() }));
+    const newSubTasks = (body.subTasks || []).map(sub => ({ 
+        id: sub.id || uuidv4(), 
+        text: sub.text || '', 
+        completed: sub.completed || false 
+    }));
 
-    const newTaskData: Task = {
-        id: uuidv4(),
+    const newTaskData: Omit<Task, 'id'> & {userId: string} = { 
         userId: userId,
         text: body.text,
         completed: false,
         dueDate: body.dueDate,
         category: body.category,
         recurrenceRule: body.recurrenceRule,
-        subTasks: newSubTasks,
-        createdAt: new Date().toISOString(),
+        subTasks: newSubTasks.filter(st => st.text.trim() !== ''), // Filter out empty subtasks
+        // createdAt will be added by Mongoose timestamps
     };
-    const task: ITask = new TaskModel(newTaskData);
+    
+    const taskToSave : Task = {id: uuidv4(), ...newTaskData};
+    const task: ITask = new TaskModel(taskToSave);
     await task.save();
     return NextResponse.json(task, { status: 201 });
   } catch (error) {
@@ -65,4 +70,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'Failed to create task', error: (error as Error).message }, { status: 500 });
   }
 }
+
 

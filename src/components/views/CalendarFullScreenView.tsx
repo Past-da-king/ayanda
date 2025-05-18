@@ -12,6 +12,7 @@ import { cn } from '@/lib/utils';
 import { X, PlusCircle, Edit, Trash2, ChevronLeft, ChevronRight, Repeat } from 'lucide-react';
 import { DateFormatter, DayPicker } from "react-day-picker"; // Import DayPicker for its types
 import { format, parseISO, isValid as isValidDate, add, startOfDay } from 'date-fns';
+import type { Locale } from 'date-fns'; // Import Locale type for options
 
 // Simplified Recurrence Editor Component for Events (can be expanded or shared)
 const EventRecurrenceEditor: React.FC<{
@@ -251,7 +252,7 @@ export function CalendarFullScreenView({
   };
 
 
-  const DayCellContent: DateFormatter = useCallback((day, options, { locale }) => {
+  const DayCellContent: DateFormatter = useCallback((day, options) => { // Corrected: removed third arg, use options for locale
     const dayStart = startOfDay(day);
     let hasBaseEvent = false;
     let hasRecurringInstance = false;
@@ -271,7 +272,7 @@ export function CalendarFullScreenView({
 
     return (
       <div className="relative w-full h-full flex items-center justify-center">
-        {format(day, "d", { locale })}
+        {format(day, "d", { locale: options?.locale })} {/* Corrected: use options?.locale */}
         {(hasBaseEvent || hasRecurringInstance) && (
           <span className={cn(
               "absolute bottom-1.5 left-1/2 -translate-x-1/2 size-1.5 rounded-full",

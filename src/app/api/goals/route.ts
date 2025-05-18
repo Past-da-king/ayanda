@@ -16,12 +16,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   try {
-    const query: any = { userId }; // Always filter by userId
+    const query: any = { userId };
     if (category && category !== "All Projects") {
       query.category = category;
     }
     const goals: IGoal[] = await GoalModel.find(query).sort({ createdAt: -1 });
-    return NextResponse.json(goals, { status: 200 });
+    return NextResponse.json(goals, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Failed to fetch goals:', error);
     return NextResponse.json({ message: 'Failed to fetch goals', error: (error as Error).message }, { status: 500 });
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   try {
-    const body: Omit<Goal, 'id' | 'userId'> = await request.json();
+    const body: Omit<Goal, 'id' | 'userId' | 'createdAt'> = await request.json();
      const newGoalData: Goal = {
         id: uuidv4(),
         userId: userId,
@@ -46,6 +46,7 @@ export async function POST(request: NextRequest) {
         targetValue: body.targetValue,
         unit: body.unit,
         category: body.category,
+        // createdAt will be added by Mongoose timestamps
     };
     const goal: IGoal = new GoalModel(newGoalData);
     await goal.save();

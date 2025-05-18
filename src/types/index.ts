@@ -18,44 +18,47 @@ export interface SubTask {
 
 export interface Task {
   id: string;
-  userId: string; // Added for user ownership
+  userId: string;
   text: string;
   completed: boolean;
   dueDate?: string; // YYYY-MM-DD format (start date for recurring)
   category: string;
   recurrenceRule?: RecurrenceRule;
   subTasks?: SubTask[];
-  createdAt?: string; // Added for sorting consistency
+  createdAt?: string; // Mongoose adds this as Date, will be string in JSON
 }
 
 export interface Goal {
   id: string;
-  userId: string; // Added for user ownership
+  userId: string;
   name: string;
   currentValue: number;
   targetValue: number;
   unit: string;
   category: string;
+  createdAt?: string; // Added for consistency if needed for sorting
 }
 
 export interface Note {
   id: string;
-  userId: string; // Added for user ownership
+  userId: string;
   title?: string;
   content: string; // Will store Markdown content
   category: string;
-  lastEdited: string; // ISO string
+  lastEdited: string; // ISO string (Mongoose 'updatedAt' can serve this role too)
+  createdAt?: string; // Added for consistency
 }
 
 export interface Event {
   id:string;
-  userId: string; // Added for user ownership
+  userId: string;
   title: string;
-  date: string; // ISO string for the event's date and time (start date/time for recurring)
+  date: string; // ISO string for the event's date and time
   duration?: number; // in minutes
   description?: string;
   category: string;
   recurrenceRule?: RecurrenceRule;
+  createdAt?: string; // Added for consistency
 }
 
 
@@ -78,6 +81,7 @@ export interface SearchResultItem {
   category: Category;
   date?: string;
   contentPreview?: string;
-  path: string; // To navigate to the item
+  path: string;
 }
+
 

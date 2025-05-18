@@ -19,7 +19,7 @@ import { NotesView } from '@/components/views/NotesView';
 import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenView';
 import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid'; // For client-side ID generation for subtasks
+import { v4 as uuidv4 } from 'uuid';
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
@@ -27,9 +27,8 @@ const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvail
 export default function HomePage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  const pathname = usePathname(); // Use usePathname
+  const pathname = usePathname();
   const searchParams = useSearchParams();
-
 
   const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   
@@ -40,25 +39,16 @@ export default function HomePage() {
   
   const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
 
-  // Filtered states are not strictly necessary if filtering happens directly in child components or renderView
-  // But keeping them can be useful if multiple components need the same filtered list.
-  // For simplicity here, we'll filter directly where needed or pass all data.
-
   const [isLoading, setIsLoading] = useState(true);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
-  // Handle deep linking or navigation to specific views/items from search or other sources
   useEffect(() => {
     const view = searchParams.get('view') as ViewMode | null;
-    // const itemId = searchParams.get('id'); // Could be used to highlight/scroll to item
     if (view && ['tasks', 'goals', 'notes', 'calendar'].includes(view)) {
       setViewMode(view);
-      // Potentially clear search params after use
-      // router.replace(pathname, undefined); // Next 13 way to clear query params
     }
-  }, [searchParams, router, pathname]);
-
+  }, [searchParams]);
 
   useEffect(() => {
     if (status === "loading") return; 
@@ -69,9 +59,8 @@ export default function HomePage() {
     }
   }, [session, status, router, initialLoadDone, pathname]);
 
-
   const fetchData = useCallback(async (categorySignal?: Category) => {
-    if (status !== "authenticated" && !categorySignal) return; 
+    if (status !== "authenticated") return; 
     
     setIsLoading(true);
     const categoryToFetch = categorySignal || currentCategory;
@@ -85,9 +74,8 @@ export default function HomePage() {
         fetch(`/api/events${queryCategory}`),
       ]);
 
-      // Basic error check
       const checkOk = (res: Response, name: string) => {
-          if(!res.ok) console.error(`Failed to fetch ${name}: ${res.status} ${res.statusText}`);
+          if(!res.ok) console.error(`Failed to fetch ${name}: ${res.status} ${res.statusText} - ${res.url}`);
           return res.ok;
       }
       
@@ -103,13 +91,10 @@ export default function HomePage() {
         setEvents(eventsData);
       } else {
          setAiMessage("Error fetching some data. Dashboard might be incomplete.");
-         // Keep stale data or clear, depending on preference
-         // setTasks([]); setGoals([]); setNotes([]); setEvents([]);
       }
     } catch (error) {
       console.error('Error fetching data:', error);
       setAiMessage("Network error fetching data.");
-      // setTasks([]); setGoals([]); setNotes([]); setEvents([]);
     } finally {
       setIsLoading(false);
     }
@@ -121,9 +106,7 @@ export default function HomePage() {
     }
   }, [fetchData, initialLoadDone, status]); 
 
-
-  // Handlers for CRUD operations
-  const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed'>) => {
+  const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed' | 'userId' | 'createdAt'>) => {
     if (status !== "authenticated") return;
     const res = await fetch('/api/tasks', {
       method: 'POST',
@@ -136,14 +119,38 @@ export default function HomePage() {
     } else { setAiMessage(`Failed to add task.`); }
   };
 
-  const handleToggleTask = async (taskId: string) => {
+  const handleToggleTask = async (taskId: string, subTaskId?: string) => {
     if (status !== "authenticated") return;
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
+
+    let updatePayload: Partial<Task>;
+
+    if (subTaskId) {
+        // Toggle a subtask
+        const updatedSubTasks = (task.subTasks || []).map(st => 
+            st.id === subTaskId ? { ...st, completed: !st.completed } : st
+        );
+        updatePayload = { subTasks: updatedSubTasks };
+        // Check if all subtasks are completed to mark parent task as completed
+        const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
+        if (updatedSubTasks.length > 0 && allSubTasksCompleted !== task.completed) {
+            updatePayload.completed = allSubTasksCompleted;
+        }
+    } else {
+        // Toggle the parent task
+        updatePayload = { completed: !task.completed };
+        // If parent task is marked complete, all subtasks should also be marked complete
+        // If parent task is marked incomplete, subtasks remain as they are (or could be all marked incomplete too - user preference)
+        if (updatePayload.completed && task.subTasks && task.subTasks.length > 0) {
+            updatePayload.subTasks = task.subTasks.map(st => ({ ...st, completed: true }));
+        }
+    }
+    
     const res = await fetch(`/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completed: !task.completed }),
+      body: JSON.stringify(updatePayload),
     });
     if (res.ok) fetchData(currentCategory);
     else setAiMessage("Failed to toggle task.");
@@ -156,8 +163,15 @@ export default function HomePage() {
     else { setAiMessage(`Failed to delete task.`); }
   };
   
-  const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id'>>) => {
+  const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id' | 'userId'>>) => {
     if (status !== "authenticated") return;
+    // Ensure subtasks being sent for update have IDs
+    if (taskUpdateData.subTasks) {
+        taskUpdateData.subTasks = taskUpdateData.subTasks.map(st => ({
+            ...st,
+            id: st.id || uuidv4() // Assign ID if missing (e.g., newly added subtask in edit modal)
+        }));
+    }
     const res = await fetch(`/api/tasks/${taskId}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -227,7 +241,7 @@ export default function HomePage() {
     else { setAiMessage(`Failed to delete note.`); }
   };
 
-  const handleAddEvent = async (eventData: Omit<AppEvent, 'id'>) => {
+  const handleAddEvent = async (eventData: Omit<AppEvent, 'id' | 'userId' | 'createdAt'>) => {
     if (status !== "authenticated") return;
     const res = await fetch('/api/events', {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventData),
@@ -236,7 +250,7 @@ export default function HomePage() {
     else { setAiMessage(`Failed to add event.`); }
   };
   
-  const handleUpdateEvent = async (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id'>>) => {
+  const handleUpdateEvent = async (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id' | 'userId'>>) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/events/${eventId}`, {
       method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventUpdateData),
@@ -263,15 +277,15 @@ export default function HomePage() {
         body: JSON.stringify({ command, currentCategory }),
     });
     
-    setIsLoading(false); // Moved setIsLoading to before fetchData
     if (res.ok) {
         const result = await res.json();
         setAiMessage(result.message || "AI command processed.");
         fetchData(currentCategory); 
     } else {
-        const errorResult = await res.json().catch(() => ({message: "AI command failed with an unknown error."})); // Add catch for non-JSON error response
+        const errorResult = await res.json().catch(() => ({message: "AI command failed with an unknown error."}));
         setAiMessage(errorResult.message || "AI command failed.");
     }
+    setIsLoading(false);
   };
 
   const onCategoryChange = (category: Category) => {
@@ -280,16 +294,17 @@ export default function HomePage() {
   };
 
   const navigateToItemHandler = (type: 'tasks' | 'calendar' | 'notes' | 'goals', id: string) => {
-    setViewMode(type);
-    // Future: Could scroll to specific item ID within the view.
-    // For now, just opening the view is sufficient.
+    // This handler is for the DueSoonWidget to navigate to the full view
+    // It might need to also pass the ID to the view or handle focusing the item
+    setViewMode(type); 
+    router.push(`/?view=${type}&id=${id}`, { scroll: false }); // Update URL for potential deep linking
   };
 
   const renderView = () => {
     const commonViewProps = {
         categories: baseAvailableCategories,
         currentCategory: (currentCategory === "All Projects" || !baseAvailableCategories.includes(currentCategory)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : currentCategory,
-        onClose: () => { setViewMode('dashboard'); setAiMessage(null); },
+        onClose: () => { setViewMode('dashboard'); setAiMessage(null); router.push('/', { scroll: false }); },
     };
     
     const dashboardDataProps = {
@@ -310,7 +325,7 @@ export default function HomePage() {
         return <CalendarFullScreenView {...commonViewProps} events={events} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} onDeleteEvent={handleDeleteEvent} />;
       case 'dashboard':
       default:
-        if (isLoading && !initialLoadDone) { // Show loading only on initial full load
+        if (isLoading && !initialLoadDone) {
             return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
         }
         if (status === "unauthenticated") { 
@@ -323,21 +338,21 @@ export default function HomePage() {
                 <TasksWidget 
                     tasks={dashboardDataProps.tasks} 
                     onTaskToggle={handleToggleTask} 
-                    onNavigate={() => setViewMode('tasks')} 
+                    onNavigate={() => { setViewMode('tasks'); router.push('/?view=tasks', { scroll: false }); }}
                     className="flex-grow"
                 />
               </div>
               <div className="flex flex-col space-y-5 md:space-y-6">
-                <CalendarWidget events={dashboardDataProps.events} onNavigate={() => setViewMode('calendar')} />
+                <CalendarWidget events={dashboardDataProps.events} onNavigate={() => { setViewMode('calendar'); router.push('/?view=calendar', { scroll: false }); }} />
                 <DueSoonWidget 
-                    tasks={tasks} // Pass all tasks for DueSoon to filter internally based on its logic
-                    events={events} // Pass all events
+                    tasks={tasks} 
+                    events={events} 
                     currentProjectId={currentCategory === "All Projects" ? null : currentCategory} 
                     onNavigateToItem={navigateToItemHandler}
                 />
               </div>
-              <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => setViewMode('goals')} />
-              <QuickNotesWidget notes={dashboardDataProps.notes} onNavigate={() => setViewMode('notes')} />
+              <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => { setViewMode('goals'); router.push('/?view=goals', { scroll: false }); }} />
+              <QuickNotesWidget notes={dashboardDataProps.notes} onNavigate={() => { setViewMode('notes'); router.push('/?view=notes', { scroll: false }); }} />
             </div>
         );
     }
@@ -379,8 +394,7 @@ export default function HomePage() {
       <main 
         className={cn(
             "flex-grow px-6 pb-24",
-             // Adjust top padding based on whether project bar and view mode
-            viewMode !== 'dashboard' ? "pt-[5rem]" : // Fullscreen views have their own internal top padding
+            viewMode !== 'dashboard' ? "pt-[5rem]" : 
             showProjectBar ? "pt-[calc(5rem+2.875rem+1.5rem)]" : "pt-[calc(5rem+1.5rem)]"
         )}
       >
@@ -390,3 +404,5 @@ export default function HomePage() {
     </div>
   );
 }
+
+

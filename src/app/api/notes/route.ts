@@ -16,12 +16,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   try {
-    const query: any = { userId }; // Always filter by userId
+    const query: any = { userId };
     if (category && category !== "All Projects") {
       query.category = category;
     }
     const notes: INote[] = await NoteModel.find(query).sort({ lastEdited: -1 });
-    return NextResponse.json(notes, { status: 200 });
+    return NextResponse.json(notes, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Failed to fetch notes:', error);
     return NextResponse.json({ message: 'Failed to fetch notes', error: (error as Error).message }, { status: 500 });
@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   try {
-    const body: Omit<Note, 'id' | 'lastEdited' | 'userId'> = await request.json();
+    const body: Omit<Note, 'id' | 'lastEdited' | 'userId' | 'createdAt'> = await request.json();
     const newNoteData: Note = {
         id: uuidv4(),
         userId: userId,
@@ -45,6 +45,7 @@ export async function POST(request: NextRequest) {
         content: body.content,
         category: body.category,
         lastEdited: new Date().toISOString(),
+        // createdAt will be added by Mongoose timestamps
     };
     const note: INote = new NoteModel(newNoteData);
     await note.save();

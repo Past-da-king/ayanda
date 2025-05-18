@@ -6,19 +6,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea"; // For subtask text if needed
-import { X, Edit, Trash2, CalendarDays, PlusCircle, Repeat, GripVertical } from 'lucide-react';
+import { Textarea } from "@/components/ui/textarea"; 
+import { X, Edit, Trash2, CalendarDays, PlusCircle, Repeat, GripVertical, ListPlus, CircleDot } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'; // For recurrence editor
-import { format, parseISO } from 'date-fns';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'; 
+import { format, parseISO, isValid as isValidDateFn } from 'date-fns';
 
 interface TasksViewProps {
   tasks: Task[];
   categories: Category[];
   currentCategory: Category;
   onAddTask: (taskData: Omit<Task, 'id' | 'completed'>) => void;
-  onToggleTask: (taskId: string) => void;
+  onToggleTask: (taskId: string, subTaskId?: string) => void;
   onDeleteTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, taskUpdateData: Partial<Omit<Task, 'id'>>) => void;
   onClose: () => void;
@@ -29,7 +29,7 @@ const RecurrenceEditor: React.FC<{
   recurrence: RecurrenceRule | undefined;
   onChange: (rule: RecurrenceRule | undefined) => void;
 }> = ({ recurrence, onChange }) => {
-  const [type, setType] = useState(recurrence?.type || 'weekly');
+  const [type, setType] = useState(recurrence?.type || '');
   const [interval, setIntervalValue] = useState(recurrence?.interval || 1);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(recurrence?.daysOfWeek || []);
   const [endDate, setEndDate] = useState(recurrence?.endDate || '');
@@ -42,44 +42,58 @@ const RecurrenceEditor: React.FC<{
       if (type === 'weekly' && daysOfWeek.length > 0) newRule.daysOfWeek = daysOfWeek;
       if (endDate) newRule.endDate = endDate;
       onChange(newRule);
-    } else {
-      onChange(undefined); // Clear if invalid
+    } else if (type === '') { // User explicitly cleared the type (or wants to disable recurrence)
+      onChange(undefined); 
     }
   }, [type, interval, daysOfWeek, endDate, onChange]);
 
   const toggleDay = (dayIndex: number) => {
-    setDaysOfWeek(prev => prev.includes(dayIndex) ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex]);
+    setDaysOfWeek(prev => prev.includes(dayIndex) ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex].sort());
+  };
+  
+  const handleTypeChange = (val: string) => {
+    if (val === '') { // "Disable Recurrence" option
+      setType('');
+      onChange(undefined);
+    } else {
+      setType(val as RecurrenceRule['type']);
+    }
   };
 
+
   if (!recurrence && type === '') { // Initial state to enable recurrence
-    return <Button variant="outline" size="sm" onClick={() => setType('weekly')} className="text-xs"><Repeat className="w-3 h-3 mr-1.5"/>Set Recurrence</Button>
+    return <Button variant="outline" onClick={() => setType('weekly')} className="input-field text-sm justify-start font-normal h-auto py-2.5"><Repeat className="w-3.5 h-3.5 mr-2 text-muted-foreground"/>Set Recurrence</Button>
   }
 
   return (
-    <div className="space-y-3 p-3 border border-border-main rounded-md bg-input-bg">
+    <div className="space-y-3 p-3 border border-border-main rounded-md bg-input-bg/50">
       <div className="flex items-center justify-between">
-        <p className="text-sm font-medium">Recurrence</p>
+        <p className="text-xs font-medium text-muted-foreground">Recurrence</p>
         <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => { onChange(undefined); setType(''); }}><X className="w-3.5 h-3.5"/></Button>
       </div>
-      <Select value={type} onValueChange={(val) => setType(val as RecurrenceRule['type'])}>
-        <SelectTrigger className="input-field text-xs h-8"><SelectValue /></SelectTrigger>
+      <Select value={type} onValueChange={handleTypeChange}>
+        <SelectTrigger className="input-field text-xs h-8"><SelectValue placeholder="Select type..."/></SelectTrigger>
         <SelectContent>
           <SelectItem value="daily">Daily</SelectItem>
           <SelectItem value="weekly">Weekly</SelectItem>
-          <SelectItem value="monthly">Monthly (basic)</SelectItem>
+          <SelectItem value="monthly">Monthly (on start date's day)</SelectItem>
+          <SelectItem value="yearly">Yearly (on start date)</SelectItem>
+          <SelectItem value="">Disable Recurrence</SelectItem>
         </SelectContent>
       </Select>
-      <Input type="number" value={interval} onChange={e => setIntervalValue(Math.max(1, parseInt(e.target.value)))} placeholder="Interval" className="input-field text-xs h-8" />
-      {type === 'weekly' && (
-        <div className="flex space-x-1">
-          {weekDays.map((day, i) => (
-            <Button key={i} variant={daysOfWeek.includes(i) ? 'default': 'outline'} size="sm" onClick={() => toggleDay(i)} className={cn("text-xs flex-1 h-7 px-1", daysOfWeek.includes(i) ? 'bg-primary text-primary-foreground' : 'border-border-main')}>
-              {day}
-            </Button>
-          ))}
-        </div>
-      )}
-      <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} placeholder="End Date (optional)" className="input-field text-xs h-8" />
+      {type && <>
+        <Input type="number" value={interval} onChange={e => setIntervalValue(Math.max(1, parseInt(e.target.value)))} placeholder="Interval (e.g., 1 for every, 2 for every other)" title="Repeat every X (days/weeks/months/years)" className="input-field text-xs h-8" />
+        {type === 'weekly' && (
+            <div className="grid grid-cols-4 gap-1 sm:grid-cols-7">
+            {weekDays.map((day, i) => (
+                <Button key={i} variant={daysOfWeek.includes(i) ? 'default': 'outline'} size="sm" onClick={() => toggleDay(i)} className={cn("text-[10px] flex-1 h-7 px-1", daysOfWeek.includes(i) ? 'bg-primary text-primary-foreground' : 'border-border-main')}>
+                {day}
+                </Button>
+            ))}
+            </div>
+        )}
+        <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} placeholder="End Date (optional)" title="Recurrence End Date" className="input-field text-xs h-8" />
+      </>}
     </div>
   );
 };
@@ -90,13 +104,13 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
   const [newTaskDueDate, setNewTaskDueDate] = useState('');
   const [newTaskCategory, setNewTaskCategory] = useState<Category>(currentCategory === "All Projects" && categories.length > 0 ? categories[0] : currentCategory);
   const [newRecurrenceRule, setNewRecurrenceRule] = useState<RecurrenceRule | undefined>(undefined);
-  const [newSubTasks, setNewSubTasks] = useState<SubTask[]>([]);
+  const [newSubTasks, setNewSubTasks] = useState<Omit<SubTask, 'id' | 'completed'>[]>([]);
   
   const [editingTask, setEditingTask] = useState<Task | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
 
-  useEffect(() => { // Ensure category for new task is valid
+  useEffect(() => { 
     if (currentCategory === "All Projects" && categories.length > 0) {
         setNewTaskCategory(categories[0]);
     } else if (categories.includes(currentCategory)) {
@@ -123,7 +137,7 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
         category: newTaskCategory,
         dueDate: newTaskDueDate || undefined,
         recurrenceRule: newRecurrenceRule,
-        subTasks: newSubTasks.filter(st => st.text.trim() !== ''),
+        subTasks: newSubTasks.filter(st => st.text.trim() !== '').map(st => ({id: uuidv4(), text: st.text, completed: false})),
       };
       onAddTask(taskData);
       resetNewTaskForm();
@@ -146,27 +160,30 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
             dueDate: formData.dueDate,
             category: formData.category,
             recurrenceRule: formData.recurrenceRule,
-            subTasks: formData.subTasks,
+            subTasks: formData.subTasks, // Backend will assign IDs if new
         });
         closeEditModal();
     }
   };
 
-  const handleAddSubTaskToNew = () => setNewSubTasks([...newSubTasks, { id: uuidv4(), text: '', completed: false }]);
+  const handleAddSubTaskToNew = () => setNewSubTasks([...newSubTasks, { text: '' }]);
   const handleNewSubTaskChange = (index: number, text: string) => {
     const updated = [...newSubTasks];
     updated[index].text = text;
     setNewSubTasks(updated);
   };
-  const handleRemoveSubTaskFromNew = (id: string) => setNewSubTasks(newSubTasks.filter(st => st.id !== id));
-
+  const handleRemoveSubTaskFromNew = (index: number) => {
+    const updated = [...newSubTasks];
+    updated.splice(index, 1);
+    setNewSubTasks(updated);
+  };
 
   const filteredTasks = tasks
     .filter(task => (currentCategory === "All Projects" || task.category === currentCategory) && (showCompleted || !task.completed))
     .sort((a, b) => {
       if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      const dateA = a.dueDate ? parseISO(a.dueDate).getTime() : Infinity;
-      const dateB = b.dueDate ? parseISO(b.dueDate).getTime() : Infinity;
+      const dateA = a.dueDate && isValidDateFn(parseISO(a.dueDate)) ? parseISO(a.dueDate).getTime() : Infinity;
+      const dateB = b.dueDate && isValidDateFn(parseISO(b.dueDate)) ? parseISO(b.dueDate).getTime() : Infinity;
       if (dateA !== dateB) return dateA - dateB;
       return (b.createdAt || '').localeCompare(a.createdAt || ''); // Fallback sort by creation time
     });
@@ -194,19 +211,21 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
             className="input-field text-base p-3"
           />
           {/* Subtasks for New Task */}
-           {newSubTasks.map((sub, index) => (
-            <div key={sub.id} className="flex items-center gap-2 pl-4">
-              <Checkbox disabled className="opacity-50"/>
-              <Input 
-                value={sub.text} 
-                onChange={(e) => handleNewSubTaskChange(index, e.target.value)} 
-                placeholder="Sub-task description"
-                className="input-field text-sm p-1.5 h-8 flex-grow"
-              />
-              <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTaskFromNew(sub.id)} className="w-7 h-7"><Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive"/></Button>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" onClick={handleAddSubTaskToNew} className="text-xs border-border-main hover:bg-widget-background ml-4">+ Add sub-task</Button>
+          <div className="pl-4 space-y-2">
+            {newSubTasks.map((sub, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <CircleDot className="w-3 h-3 text-muted-foreground/50 shrink-0"/>
+                  <Input 
+                    value={sub.text} 
+                    onChange={(e) => handleNewSubTaskChange(index, e.target.value)} 
+                    placeholder="Sub-task description"
+                    className="input-field text-sm p-1.5 h-8 flex-grow"
+                  />
+                  <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTaskFromNew(index)} className="w-7 h-7"><Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive"/></Button>
+                </div>
+            ))}
+            <Button variant="outline" size="sm" onClick={handleAddSubTaskToNew} className="text-xs border-border-main hover:bg-widget-background"><ListPlus className="w-3 h-3 mr-1.5"/>Add sub-task</Button>
+          </div>
 
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 items-end pt-2">
@@ -214,18 +233,11 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
               type="date"
               value={newTaskDueDate}
               onChange={(e) => setNewTaskDueDate(e.target.value)}
-              className="input-field text-sm"
+              className="input-field text-sm h-auto py-2.5"
+              title="Due Date"
             />
-             <Popover>
-                <PopoverTrigger asChild>
-                   <Button variant="outline" className="input-field text-sm justify-start font-normal h-auto py-2.5">
-                     <Repeat className="w-3.5 h-3.5 mr-2"/> {newRecurrenceRule ? `${newRecurrenceRule.type}` : "Set Recurrence"}
-                   </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0">
-                   <RecurrenceEditor recurrence={newRecurrenceRule} onChange={setNewRecurrenceRule} />
-                </PopoverContent>
-            </Popover>
+            <RecurrenceEditor recurrence={newRecurrenceRule} onChange={setNewRecurrenceRule} />
+
             <Select value={newTaskCategory} onValueChange={(val) => setNewTaskCategory(val as Category)}>
               <SelectTrigger className="input-field text-sm h-auto py-2.5">
                 <SelectValue placeholder="Category" />
@@ -269,7 +281,7 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
                             <span className={cn("text-base block", task.completed && "line-through")}>{task.text}</span>
                             <p className="text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-2 gap-y-0.5">
                                 <span>{task.category}</span>
-                                {task.dueDate && (
+                                {task.dueDate && isValidDateFn(parseISO(task.dueDate)) && (
                                     <>
                                         <span className="text-muted-foreground/50">•</span>
                                         <span className="flex items-center"><CalendarDays className="w-3 h-3 inline mr-1" />
@@ -297,15 +309,12 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
                         {task.subTasks.map(sub => (
                             <div key={sub.id} className="flex items-center text-sm">
                                 <Checkbox 
-                                    id={`subtask-${task.id}-${sub.id}`}
+                                    id={`subtask-fs-${task.id}-${sub.id}`}
                                     checked={sub.completed}
-                                    onCheckedChange={() => {
-                                        const updatedSubTasks = task.subTasks?.map(s => s.id === sub.id ? {...s, completed: !s.completed} : s);
-                                        onUpdateTask(task.id, { subTasks: updatedSubTasks });
-                                    }}
-                                    className="h-4 w-4 mr-2 border-muted-foreground data-[state=checked]:bg-primary/70 data-[state=checked]:border-primary/70"
+                                    onCheckedChange={() => onToggleTask(task.id, sub.id)}
+                                    className="h-4 w-4 mr-2 border-muted-foreground data-[state=checked]:bg-primary/70 data-[state=checked]:border-primary/70 data-[state=checked]:text-primary-foreground"
                                 />
-                                <label htmlFor={`subtask-${task.id}-${sub.id}`} className={cn("flex-grow", sub.completed && "line-through text-muted-foreground")}>{sub.text}</label>
+                                <label htmlFor={`subtask-fs-${task.id}-${sub.id}`} className={cn("flex-grow cursor-pointer", sub.completed && "line-through text-muted-foreground")}>{sub.text}</label>
                             </div>
                         ))}
                     </div>
@@ -346,7 +355,7 @@ function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps
     const [subTasks, setSubTasks] = useState<SubTask[]>(task.subTasks ? JSON.parse(JSON.stringify(task.subTasks)) : []); // Deep copy
 
     const handleAddSubTask = () => setSubTasks([...subTasks, { id: uuidv4(), text: '', completed: false }]);
-    const handleSubTaskChange = (id: string, newText: string) => {
+    const handleSubTaskTextChange = (id: string, newText: string) => {
         setSubTasks(subTasks.map(st => st.id === id ? { ...st, text: newText } : st));
     };
     const handleSubTaskToggle = (id: string) => {
@@ -369,6 +378,7 @@ function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps
                 </div>
                 
                 <div className="flex-grow overflow-y-auto space-y-4 pr-2 custom-scrollbar-fullscreen">
+                    <label className="text-xs font-medium text-muted-foreground">Task Description</label>
                     <Input value={text} onChange={e => setText(e.target.value)} placeholder="Task description" className="input-field p-3"/>
                     
                     <div className="space-y-1">
@@ -376,15 +386,16 @@ function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps
                         {subTasks.map((sub) => (
                         <div key={sub.id} className="flex items-center gap-2">
                             <Checkbox id={`edit-sub-${sub.id}`} checked={sub.completed} onCheckedChange={() => handleSubTaskToggle(sub.id)} className="h-4 w-4 border-muted-foreground"/>
-                            <Input value={sub.text} onChange={e => handleSubTaskChange(sub.id, e.target.value)} className="input-field flex-grow text-sm p-1 h-8" placeholder="Sub-task description"/>
+                            <Input value={sub.text} onChange={e => handleSubTaskTextChange(sub.id, e.target.value)} className="input-field flex-grow text-sm p-1 h-8" placeholder="Sub-task description"/>
                             <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTask(sub.id)} className="h-7 w-7"><Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"/></Button>
                         </div>
                         ))}
-                        <Button variant="outline" size="sm" onClick={handleAddSubTask} className="text-xs border-border-main hover:bg-input-bg">+ Add sub-task</Button>
+                        <Button variant="outline" size="sm" onClick={handleAddSubTask} className="text-xs border-border-main hover:bg-input-bg"><ListPlus className="w-3 h-3 mr-1.5"/>Add sub-task</Button>
                     </div>
 
+                    <label className="text-xs font-medium text-muted-foreground">Details</label>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field p-3"/>
+                        <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field p-3 h-auto" title="Due Date"/>
                         <Select value={category} onValueChange={val => setCategory(val as Category)}>
                             <SelectTrigger className="input-field p-3 h-auto"><SelectValue/></SelectTrigger>
                             <SelectContent className="bg-widget-background border-border-main">
@@ -403,3 +414,4 @@ function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps
         </div>
     );
 }
+

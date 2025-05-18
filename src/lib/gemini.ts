@@ -30,16 +30,20 @@ function getTodaysDate() { return format(new Date(), 'yyyy-MM-dd'); }
 function getTomorrowsDate() { return format(addDays(new Date(), 1), 'yyyy-MM-dd'); }
 
 export interface AiOperation {
-  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "unknown" | "clarification" | "suggestion";
+  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "updateTask" | "unknown" | "clarification" | "suggestion";
   payload: Partial<Task & Note & Goal & AppEvent & { 
+    taskIdToUpdate?: string; // For updateTask action
     text?: string; name?: string; title?: string; content?: string; // Basic fields
     targetValue?: number; unit?: string; // Goal specific
     date?: string; description?: string; // Event specific
     dueDate?: string; // Task specific
     category?: Category; 
     message?: string; // For clarification/suggestion
-    recurrenceRule?: RecurrenceRule; // New
-    subTasks?: { text: string }[]; // New: text for subtasks, IDs will be generated later
+    recurrenceRule?: RecurrenceRule;
+    subTasks?: { text: string }[]; // For creating tasks with subtasks
+    subTasksToAdd?: { text: string }[]; // For adding subtasks to an existing task
+    subTasksToRemove?: string[]; // IDs of subtasks to remove
+    subTasksToUpdate?: { id: string; text?: string; completed?: boolean }[]; // For updating existing subtasks
   }>;
   error?: string;
 }
@@ -59,24 +63,24 @@ export async function processWithGemini(
   const tomorrow = getTomorrowsDate();
 
   const prompt = `
-    You are AYANDA, an AI assistant. Analyze the user's command and convert it into a structured JSON object.
+    You are AYANDA, an AI assistant. Your primary goal is to accurately convert the user's specific command into a structured JSON object.
     Today's date is ${today}. Tomorrow's date is ${tomorrow}.
 
     The JSON object MUST have a field "operations" which is an ARRAY of objects. Each object in the array represents a distinct action to be taken.
     Each operation object must have "action" and "payload" fields.
-    "action" can be: "addTask", "addNote", "addGoal", "addEvent", "clarification", "suggestion", or "unknown".
-    "payload" contains details for that action.
+    "action" can be: "addTask", "addNote", "addGoal", "addEvent", "updateTask", "clarification", "suggestion", or "unknown".
+    "payload" contains details for that action. Your interpretation MUST be based on the user's command.
 
     Available categories for items are: ${availableCategories.join(", ")}.
     If the user specifies a category, use it. If not, and the command implies a category, try to infer it.
-    If no category is specified or can be reasonably inferred for an item, use the current category: "${currentCategory}". If currentCategory is "All Projects", try to pick a more specific one from the available list for that item, or use the first available specific category if unsure.
+    If no category is specified or can be reasonably inferred for an item, use the current category: "${currentCategory}". If currentCategory is "All Projects", try to pick a more specific one from the available list for that item, or use the first available specific category if unsure (e.g., "Personal Life").
 
     Field details for "payload" based on "action":
     - "addTask":
       - "text": (string, required) Task description.
       - "dueDate": (string, optional, YYYY-MM-DD format) Infer date. This is the start date for recurring tasks.
       - "category": (string, required) Category.
-      - "subTasks": (array of objects, optional) Each object: { "text": "subtask description" }.
+      - "subTasks": (array of objects, optional) For creating subtasks with a NEW task. Each object: { "text": "subtask description" }.
       - "recurrenceRule": (object, optional) With "type" ('daily', 'weekly', 'monthly', 'yearly'), "interval" (number), and optional "daysOfWeek" (array of numbers 0-6 for weekly), "dayOfMonth" (number for monthly), "endDate" (YYYY-MM-DD), "count" (number).
     - "addNote":
       - "title": (string, optional) Note title.
@@ -94,6 +98,14 @@ export async function processWithGemini(
       - "description": (string, optional) Description.
       - "category": (string, required) Category.
       - "recurrenceRule": (object, optional) Same structure as for tasks.
+    - "updateTask":
+      - "taskIdToUpdate": (string, optional) ID of the task if known or clearly implied by the user's command (e.g., "update task ID 123"). If the user refers to a task by name (e.g., "add subtask to 'Project X'"), you can set the "text" field to "Project X" and OMIT "taskIdToUpdate". The system will try to find it.
+      - "text": (string, optional) New task description or the name of the task to find if taskIdToUpdate is not known.
+      - "dueDate": (string, optional, YYYY-MM-DD format) New due date.
+      - "category": (string, optional) New category.
+      - "completed": (boolean, optional) New completion status.
+      - "subTasksToAdd": (array of objects, optional) For ADDING subtasks to an EXISTING task. Each object: { "text": "subtask description" }.
+      - "recurrenceRule": (object, optional) New or updated recurrence rule.
     - "clarification" or "suggestion":
       - "message": (string, required) Message to display.
     - "unknown":
@@ -102,14 +114,60 @@ export async function processWithGemini(
 
     Infer recurrence from phrases like "every day", "weekly on Tuesdays", "monthly on the 15th", "every 2 weeks".
     For weekly recurrence, "daysOfWeek" should be an array of numbers (Sunday=0, Monday=1, ..., Saturday=6).
-    Example: "add task to prepare slides for work due next Friday, recurring weekly"
+    
+    Example 1 (New task with subtasks): User says "Create a task to organize my study notes with subtasks: review lecture 1, summarize chapter 2, create flashcards for key terms."
+    JSON Output:
     {
       "operations": [
-        { "action": "addTask", "payload": { "text": "prepare slides", "dueDate": "YYYY-MM-DD (next Friday)", "category": "Work", "recurrenceRule": {"type": "weekly", "interval": 1, "daysOfWeek": [5] } } }
+        { 
+          "action": "addTask", 
+          "payload": { 
+            "text": "Organize my study notes", 
+            "category": "Studies", 
+            "subTasks": [ 
+              { "text": "review lecture 1" }, 
+              { "text": "summarize chapter 2" }, 
+              { "text": "create flashcards for key terms" } 
+            ] 
+          } 
+        }
       ]
     }
-    If the command is "task: read chapter 5 with subtasks: take notes, summarize section 1, review key terms", the subTasks array should be generated.
+
+    Example 2 (Add subtasks to an existing task named 'Client Presentation'): User says "Add subtasks to 'Client Presentation': final run-through and check equipment."
+    JSON Output:
+    {
+      "operations": [
+        { 
+          "action": "updateTask", 
+          "payload": { 
+            "text": "Client Presentation", // Task name to find
+            "subTasksToAdd": [ 
+              { "text": "final run-through" }, 
+              { "text": "check equipment" } 
+            ] 
+          } 
+        }
+      ]
+    }
+
+    Example 3 (Simple task): User says "remind me to call John tomorrow at 2 PM about the project"
+    JSON Output:
+    {
+        "operations": [
+            {
+                "action": "addEvent",
+                "payload": {
+                    "title": "Call John about the project",
+                    "date": "${tomorrow}T14:00:00.000Z",
+                    "category": "${currentCategory === "All Projects" ? "Personal Life" : currentCategory}"
+                }
+            }
+        ]
+    }
+
     If the command is very unclear, return: { "operations": [ { "action": "unknown", "payload": { "error": "Could not understand the request." } } ] }.
+    Focus on the user's intent.
 
     User Command: "${command}"
     JSON Output:
@@ -133,18 +191,21 @@ export async function processWithGemini(
         let { action, payload } = op;
         if (!payload) payload = {};
 
-        // Post-process category
-        if ((payload.category === "All Projects" || !payload.category) && action !== 'clarification' && action !== 'suggestion' && action !== 'unknown') {
+        // Post-process category: Ensure a specific category is assigned if "All Projects" was the context
+        if ((payload.category === "All Projects" || !payload.category) && 
+            action !== 'clarification' && action !== 'suggestion' && action !== 'unknown') {
+            
             if (currentCategory !== "All Projects" && availableCategories.includes(currentCategory)) {
                 payload.category = currentCategory;
             } else {
+                // If currentCategory is "All Projects" or not in available, pick first specific one
                 const firstSpecificCategory = availableCategories.find(cat => cat !== "All Projects");
-                payload.category = firstSpecificCategory || (availableCategories.length > 0 ? availableCategories[0] : "Personal Life"); // Fallback
+                payload.category = firstSpecificCategory || (availableCategories.length > 0 && availableCategories[0] !== "All Projects" ? availableCategories[0] : "Personal Life"); // Final fallback
             }
         }
         
         // Validate/format dates
-        if (action === "addTask" && payload.dueDate) {
+        if ((action === "addTask" || action === "updateTask") && payload.dueDate) {
             try {
                 const parsedDate = parseISO(payload.dueDate as string);
                 payload.dueDate = isValid(parsedDate) ? format(parsedDate, 'yyyy-MM-dd') : undefined;
@@ -152,7 +213,12 @@ export async function processWithGemini(
         }
         if (action === "addEvent" && payload.date) {
             try {
-                const parsedEventDate = parseISO(payload.date as string);
+                // Attempt to parse, allowing for YYYY-MM-DD or full ISO
+                let parsedEventDate = parseISO(payload.date as string);
+                if (!isValid(parsedEventDate) && (payload.date as string).match(/^\d{4}-\d{2}-\d{2}$/)) {
+                    // If it's just a date, append a default time (e.g., noon) before parsing
+                    parsedEventDate = parseISO(`${payload.date}T12:00:00.000Z`);
+                }
                 payload.date = isValid(parsedEventDate) ? parsedEventDate.toISOString() : undefined;
             } catch (e) { payload.date = undefined; }
         }
@@ -179,3 +245,4 @@ export async function processWithGemini(
     };
   }
 }
+

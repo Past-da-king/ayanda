@@ -20,24 +20,31 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   await dbConnect();
   const { id } = params;
   try {
-    const body: Partial<Omit<Task, 'id' | 'userId'>> & { subTasks?: SubTask[], recurrenceRule?: RecurrenceRule } = await request.json();
+    const body: Partial<Omit<Task, 'id' | 'userId'>> & { subTasks?: Partial<SubTask>[], recurrenceRule?: RecurrenceRule | null } = await request.json();
 
     const updatePayload: any = { ...body };
     
+    // Ensure subtasks have IDs and default completion status if not provided
     if (body.subTasks) {
       updatePayload.subTasks = body.subTasks.map(sub => ({
-        ...sub,
         id: sub.id || uuidv4(),
-      }));
+        text: sub.text || '',
+        completed: sub.completed || false,
+      })).filter(st => st.text.trim() !== ''); // Filter out empty subtasks
     }
     
-    if (body.hasOwnProperty('recurrenceRule') && !body.recurrenceRule) {
-        updatePayload.$unset = { recurrenceRule: "" };
+    if (body.hasOwnProperty('recurrenceRule') && body.recurrenceRule === null) {
+        updatePayload.$unset = { recurrenceRule: "" }; // To remove the field from MongoDB doc
         delete updatePayload.recurrenceRule;
+    } else if (body.recurrenceRule) {
+        updatePayload.recurrenceRule = body.recurrenceRule;
     }
-    if (body.hasOwnProperty('subTasks') && body.subTasks === null) {
+
+    // Handle case where subTasks might be explicitly set to null or empty array to clear them
+    if (body.hasOwnProperty('subTasks') && (body.subTasks === null || (Array.isArray(body.subTasks) && body.subTasks.length === 0))) {
       updatePayload.subTasks = [];
     }
+
 
     const updatedTask = await TaskModel.findOneAndUpdate({ id: id, userId: userIdAuth }, updatePayload, { new: true, runValidators: true });
     if (!updatedTask) {
@@ -73,4 +80,5 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     return NextResponse.json({ message: `Failed to delete task ${id}`, error: (error as Error).message }, { status: 500 });
   }
 }
+
 

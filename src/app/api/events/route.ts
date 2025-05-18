@@ -17,12 +17,12 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   try {
-    const query: any = { userId }; // Always filter by userId
+    const query: any = { userId };
     if (category && category !== "All Projects") {
       query.category = category;
     }
     const events: IEvent[] = await EventModel.find(query).sort({ date: 1 });
-    return NextResponse.json(events, { status: 200 });
+    return NextResponse.json(events, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
     console.error('Failed to fetch events:', error);
     return NextResponse.json({ message: 'Failed to fetch events', error: (error as Error).message }, { status: 500 });
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   try {
-    const body: Omit<AppEvent, 'id' | 'userId'> & { recurrenceRule?: RecurrenceRule } = await request.json();
+    const body: Omit<AppEvent, 'id' | 'userId' | 'createdAt'> & { recurrenceRule?: RecurrenceRule } = await request.json();
     const newEventData: AppEvent = {
         id: uuidv4(),
         userId: userId,
@@ -48,6 +48,7 @@ export async function POST(request: NextRequest) {
         description: body.description,
         category: body.category,
         recurrenceRule: body.recurrenceRule,
+        // createdAt will be added by Mongoose timestamps
     };
     const event: IEvent = new EventModel(newEventData);
     await event.save();
