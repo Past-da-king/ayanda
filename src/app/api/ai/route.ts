@@ -8,15 +8,16 @@ import NoteModel from '@/models/NoteModel';
 import GoalModel from '@/models/GoalModel';
 import EventModel from '@/models/EventModel';
 import { getToken } from 'next-auth/jwt';
+import type { Part } from '@google/generative-ai'; // Import Part type
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 
 async function findTaskByName(userId: string, taskName: string, category?: Category): Promise<Task | null> {
-    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } }; // Case-insensitive exact match
+    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } };
     if (category && category !== "All Projects") {
         query.category = category;
     }
-    return TaskModel.findOne(query).lean(); // .lean() for plain JS object
+    return TaskModel.findOne(query).lean();
 }
 
 
@@ -29,19 +30,21 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   try {
-    const { command, currentCategory } = await request.json();
+    // Expect 'parts' instead of 'command'
+    const { parts, currentCategory } = await request.json();
 
-    if (!command || typeof command !== 'string') {
-      return NextResponse.json({ message: 'Command is required and must be a string.' }, { status: 400 });
+    if (!parts || !Array.isArray(parts) || parts.length === 0) {
+      return NextResponse.json({ message: 'Input parts are required.' }, { status: 400 });
     }
     if (!currentCategory || typeof currentCategory !== 'string') {
       return NextResponse.json({ message: 'currentCategory is required and must be a string.' }, { status: 400 });
     }
 
-    const geminiResult: GeminiProcessedResponse = await processWithGemini(command, currentCategory as Category, ["All Projects", ...baseAvailableCategories]);
+    // Pass the 'parts' array directly to processWithGemini
+    const geminiResult: GeminiProcessedResponse = await processWithGemini(parts as Part[], currentCategory as Category, ["All Projects", ...baseAvailableCategories]);
 
     if (geminiResult.overallError || geminiResult.operations.length === 0) {
-      return NextResponse.json({ message: 'AI could not process the command.', details: geminiResult.overallError || "No operations returned from AI.", originalCommand: command }, { status: 422 });
+      return NextResponse.json({ message: 'AI could not process the command.', details: geminiResult.overallError || "No operations returned from AI.", originalInput: parts }, { status: 422 });
     }
 
     let createdItemsInfo: { type: string; summary: string; success: boolean; error?: string }[] = [];
@@ -82,10 +85,10 @@ export async function POST(request: NextRequest) {
 
             if (taskToUpdateId) {
                 taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId });
-            } else if (operation.payload.text) { // AI provided task name instead of ID
+            } else if (operation.payload.text) { 
                 taskInstance = await findTaskByName(userId, operation.payload.text, effectiveCategory as Category);
                 if (taskInstance) {
-                    taskToUpdateId = taskInstance.id; // Found the ID
+                    taskToUpdateId = taskInstance.id; 
                 }
             }
 
@@ -101,8 +104,7 @@ export async function POST(request: NextRequest) {
                 taskInstance.subTasks = [...(taskInstance.subTasks || []), ...newSubTasksForExisting];
                 updated = true;
             }
-            // Handle other direct updates to the task if AI provides them
-            if (operation.payload.text && operation.payload.text !== taskInstance.text) { // only update if text is different and not just used for lookup
+            if (operation.payload.text && operation.payload.text !== taskInstance.text) {
                 taskInstance.text = operation.payload.text;
                 updated = true;
             }
@@ -189,7 +191,7 @@ export async function POST(request: NextRequest) {
           case 'suggestion':
             if (operation.payload.message) {
               aiMessageForCard = operation.payload.message;
-              if (geminiResult.operations.length === 1) { // If this is the *only* operation
+              if (geminiResult.operations.length === 1) { 
                  createdItemsInfo.push({ type: operation.action, summary: operation.payload.message, success: true});
               }
             }
@@ -216,14 +218,14 @@ export async function POST(request: NextRequest) {
         responseMessage = successfulActions.map(s => `${s.type} "${s.summary}..." processed`).join('. ') + ". ";
     }
     
-    if (aiMessageForCard) { // If there's a specific clarification/suggestion message from a dedicated operation
-        responseMessage = aiMessageForCard; // This message takes precedence if it's the only "successful" thing
+    if (aiMessageForCard) { 
+        responseMessage = aiMessageForCard; 
     }
     
     if (createdItemsInfo.some(item => !item.success)) {
         const failures = createdItemsInfo.filter(item => !item.success);
         responseMessage += (responseMessage ? " " : "") + "Some operations failed: " + failures.map(f => `${f.type} (${f.error || 'Unknown error'})`).join('. ') + ".";
-        hasErrors = true; // Ensure hasErrors is true if any operation failed
+        hasErrors = true; 
     }
     
     if (responseMessage.trim() === "") {
@@ -233,13 +235,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
         message: responseMessage.trim(), 
         details: createdItemsInfo, 
-        originalCommand: command 
-    }, { status: hasErrors && !createdItemsInfo.some(i=>i.success) ? 422 : 200 }); // 422 if all ops failed or only unknown/error ops
+        originalInput: parts 
+    }, { status: hasErrors && !createdItemsInfo.some(i=>i.success) ? 422 : 200 });
 
   } catch (error) {
     console.error('Error in AI command processing API:', error);
     return NextResponse.json({ message: 'Failed to process AI command.', error: (error as Error).message }, { status: 500 });
   }
 }
-
-

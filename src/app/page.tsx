@@ -20,6 +20,7 @@ import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenVie
 import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
+import type { Part } from '@google/generative-ai'; // Import Part type
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
@@ -39,7 +40,8 @@ export default function HomePage() {
   
   const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // General loading for data fetches
+  const [isProcessingAi, setIsProcessingAi] = useState(false); // Specific for AI command processing
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
@@ -106,6 +108,7 @@ export default function HomePage() {
     }
   }, [fetchData, initialLoadDone, status]); 
 
+  // --- CRUD Handlers (unchanged from previous versions) ---
   const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed' | 'userId' | 'createdAt'>) => {
     if (status !== "authenticated") return;
     const res = await fetch('/api/tasks', {
@@ -127,21 +130,16 @@ export default function HomePage() {
     let updatePayload: Partial<Task>;
 
     if (subTaskId) {
-        // Toggle a subtask
         const updatedSubTasks = (task.subTasks || []).map(st => 
             st.id === subTaskId ? { ...st, completed: !st.completed } : st
         );
         updatePayload = { subTasks: updatedSubTasks };
-        // Check if all subtasks are completed to mark parent task as completed
         const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
         if (updatedSubTasks.length > 0 && allSubTasksCompleted !== task.completed) {
             updatePayload.completed = allSubTasksCompleted;
         }
     } else {
-        // Toggle the parent task
         updatePayload = { completed: !task.completed };
-        // If parent task is marked complete, all subtasks should also be marked complete
-        // If parent task is marked incomplete, subtasks remain as they are (or could be all marked incomplete too - user preference)
         if (updatePayload.completed && task.subTasks && task.subTasks.length > 0) {
             updatePayload.subTasks = task.subTasks.map(st => ({ ...st, completed: true }));
         }
@@ -165,11 +163,10 @@ export default function HomePage() {
   
   const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id' | 'userId'>>) => {
     if (status !== "authenticated") return;
-    // Ensure subtasks being sent for update have IDs
     if (taskUpdateData.subTasks) {
         taskUpdateData.subTasks = taskUpdateData.subTasks.map(st => ({
             ...st,
-            id: st.id || uuidv4() // Assign ID if missing (e.g., newly added subtask in edit modal)
+            id: st.id || uuidv4() 
         }));
     }
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -265,16 +262,18 @@ export default function HomePage() {
     if (res.ok) { fetchData(currentCategory); setAiMessage(`Event deleted.`); } 
     else { setAiMessage(`Failed to delete event.`); }
   };
+  // --- END CRUD Handlers ---
 
-  const handleAiInputCommand = async (command: string) => {
+
+  const processAiCommandWithParts = async (inputParts: Part[]) => {
     if (status !== "authenticated") return;
-    setIsLoading(true); 
-    setAiMessage(`AIDA is processing your command...`); 
+    setIsProcessingAi(true);
+    setAiMessage(`AIDA is processing your input...`); 
 
     const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command, currentCategory }),
+        body: JSON.stringify({ parts: inputParts, currentCategory }), // Send parts directly
     });
     
     if (res.ok) {
@@ -285,8 +284,20 @@ export default function HomePage() {
         const errorResult = await res.json().catch(() => ({message: "AI command failed with an unknown error."}));
         setAiMessage(errorResult.message || "AI command failed.");
     }
-    setIsLoading(false);
+    setIsProcessingAi(false);
   };
+
+  const handleTextCommand = (command: string) => {
+    const textPart: Part = { text: command };
+    processAiCommandWithParts([textPart]);
+  };
+
+  const handleAudioCommand = (audioBase64: string, mimeType: string) => {
+    const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
+    const instructionPart: Part = { text: "This is an audio command. Please process it and respond with JSON operations as AYANDA assistant." };
+    processAiCommandWithParts([audioPart, instructionPart]);
+  };
+
 
   const onCategoryChange = (category: Category) => {
     setCurrentCategory(category);
@@ -294,10 +305,8 @@ export default function HomePage() {
   };
 
   const navigateToItemHandler = (type: 'tasks' | 'calendar' | 'notes' | 'goals', id: string) => {
-    // This handler is for the DueSoonWidget to navigate to the full view
-    // It might need to also pass the ID to the view or handle focusing the item
     setViewMode(type); 
-    router.push(`/?view=${type}&id=${id}`, { scroll: false }); // Update URL for potential deep linking
+    router.push(`/?view=${type}&id=${id}`, { scroll: false });
   };
 
   const renderView = () => {
@@ -400,9 +409,13 @@ export default function HomePage() {
       >
         {renderView()}
       </main>
-      {status === "authenticated" && <FooterChat onSendCommand={handleAiInputCommand} />}
+      {status === "authenticated" && (
+        <FooterChat 
+            onSendCommand={handleTextCommand} 
+            onSendAudioCommand={handleAudioCommand}
+            isProcessingAi={isProcessingAi}
+        />
+      )}
     </div>
   );
 }
-
-

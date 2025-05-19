@@ -1456,720 +1456,6 @@ A utility function to convert Zod schema objects into the `Schema` format expect
 ---
 ```
 
-## ayanda/src/components/ui/select.tsx
-
-```typescript
-"use client"
-
-import * as React from "react"
-import * as SelectPrimitive from "@radix-ui/react-select"
-import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "lucide-react"
-
-import { cn } from "@/lib/utils"
-
-function Select({
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />
-}
-
-function SelectGroup({
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Group>) {
-  return <SelectPrimitive.Group data-slot="select-group" {...props} />
-}
-
-function SelectValue({
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Value>) {
-  return <SelectPrimitive.Value data-slot="select-value" {...props} />
-}
-
-function SelectTrigger({
-  className,
-  size = "default",
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Trigger> & {
-  size?: "sm" | "default"
-}) {
-  return (
-    <SelectPrimitive.Trigger
-      data-slot="select-trigger"
-      data-size={size}
-      className={cn(
-        "border-input data-[placeholder]:text-muted-foreground [&_svg:not([class*='text-'])]:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive dark:bg-input/30 dark:hover:bg-input/50 flex w-fit items-center justify-between gap-2 rounded-md border bg-transparent px-3 py-2 text-sm whitespace-nowrap shadow-xs transition-[color,box-shadow] outline-none focus-visible:ring-[3px] disabled:cursor-not-allowed disabled:opacity-50 data-[size=default]:h-9 data-[size=sm]:h-8 *:data-[slot=select-value]:line-clamp-1 *:data-[slot=select-value]:flex *:data-[slot=select-value]:items-center *:data-[slot=select-value]:gap-2 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        className
-      )}
-      {...props}
-    >
-      {children}
-      <SelectPrimitive.Icon asChild>
-        <ChevronDownIcon className="size-4 opacity-50" />
-      </SelectPrimitive.Icon>
-    </SelectPrimitive.Trigger>
-  )
-}
-
-function SelectContent({
-  className,
-  children,
-  position = "popper",
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Content>) {
-  return (
-    <SelectPrimitive.Portal>
-      <SelectPrimitive.Content
-        data-slot="select-content"
-        className={cn(
-          "bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 relative z-50 max-h-(--radix-select-content-available-height) min-w-[8rem] origin-(--radix-select-content-transform-origin) overflow-x-hidden overflow-y-auto rounded-md border shadow-md",
-          position === "popper" &&
-            "data-[side=bottom]:translate-y-1 data-[side=left]:-translate-x-1 data-[side=right]:translate-x-1 data-[side=top]:-translate-y-1",
-          className
-        )}
-        position={position}
-        {...props}
-      >
-        <SelectScrollUpButton />
-        <SelectPrimitive.Viewport
-          className={cn(
-            "p-1",
-            position === "popper" &&
-              "h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)] scroll-my-1"
-          )}
-        >
-          {children}
-        </SelectPrimitive.Viewport>
-        <SelectScrollDownButton />
-      </SelectPrimitive.Content>
-    </SelectPrimitive.Portal>
-  )
-}
-
-function SelectLabel({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Label>) {
-  return (
-    <SelectPrimitive.Label
-      data-slot="select-label"
-      className={cn("text-muted-foreground px-2 py-1.5 text-xs", className)}
-      {...props}
-    />
-  )
-}
-
-function SelectItem({
-  className,
-  children,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Item>) {
-  return (
-    <SelectPrimitive.Item
-      data-slot="select-item"
-      className={cn(
-        "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
-        className
-      )}
-      {...props}
-    >
-      <span className="absolute right-2 flex size-3.5 items-center justify-center">
-        <SelectPrimitive.ItemIndicator>
-          <CheckIcon className="size-4" />
-        </SelectPrimitive.ItemIndicator>
-      </span>
-      <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
-    </SelectPrimitive.Item>
-  )
-}
-
-function SelectSeparator({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.Separator>) {
-  return (
-    <SelectPrimitive.Separator
-      data-slot="select-separator"
-      className={cn("bg-border pointer-events-none -mx-1 my-1 h-px", className)}
-      {...props}
-    />
-  )
-}
-
-function SelectScrollUpButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollUpButton>) {
-  return (
-    <SelectPrimitive.ScrollUpButton
-      data-slot="select-scroll-up-button"
-      className={cn(
-        "flex cursor-default items-center justify-center py-1",
-        className
-      )}
-      {...props}
-    >
-      <ChevronUpIcon className="size-4" />
-    </SelectPrimitive.ScrollUpButton>
-  )
-}
-
-function SelectScrollDownButton({
-  className,
-  ...props
-}: React.ComponentProps<typeof SelectPrimitive.ScrollDownButton>) {
-  return (
-    <SelectPrimitive.ScrollDownButton
-      data-slot="select-scroll-down-button"
-      className={cn(
-        "flex cursor-default items-center justify-center py-1",
-        className
-      )}
-      {...props}
-    >
-      <ChevronDownIcon className="size-4" />
-    </SelectPrimitive.ScrollDownButton>
-  )
-}
-
-export {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectScrollDownButton,
-  SelectScrollUpButton,
-  SelectSeparator,
-  SelectTrigger,
-  SelectValue,
-}
-
-
-```
-
-## ayanda/src/components/views/CalendarFullScreenView.tsx
-
-```typescript
-"use client"; 
-
-import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { Event as AppEvent, Category, RecurrenceRule } from '@/types';
-import { cn } from '@/lib/utils';
-import { X, PlusCircle, Edit, Trash2, ChevronLeft, ChevronRight, Repeat, Eye, Pencil } from 'lucide-react'; // Added Eye, Pencil
-import { DateFormatter, DayPicker } from "react-day-picker"; 
-import { format, parseISO, isValid as isValidDate, add, startOfDay } from 'date-fns';
-import type { Locale } from 'date-fns';
-import ReactMarkdown from 'react-markdown'; // Added for Markdown Preview
-
-// Markdown Cheatsheet (moved from NotesView for potential reuse if needed, or keep in NotesView if only used there)
-const MarkdownCheatsheet: React.FC = () => (
-  <div className="p-3 text-xs space-y-1 text-muted-foreground bg-popover border border-border rounded-md shadow-md w-64">
-    <p><strong># H1</strong>, <strong>## H2</strong>, <strong>### H3</strong></p>
-    <p><strong>**bold**</strong> or __bold__</p>
-    <p><em>*italic*</em> or _italic_</p>
-    <p>~<sub>~</sub>Strikethrough~<sub>~</sub></p>
-    <p>Unordered List: <br />- Item 1<br />- Item 2</p>
-    <p>Ordered List: <br />1. Item 1<br />2. Item 2</p>
-    <p>Checklist: <br />- [ ] To do<br />- [x] Done</p>
-    <p>[Link Text](https://url.com)</p>
-    <p>`Inline code`</p>
-    <p>```<br />Code block<br />```</p>
-  </div>
-);
-
-
-// Simplified Recurrence Editor Component for Events (can be expanded or shared)
-const EventRecurrenceEditor: React.FC<{
-  recurrence: RecurrenceRule | undefined;
-  onChange: (rule: RecurrenceRule | undefined) => void;
-  startDate: string; // YYYY-MM-DD format from the event form
-}> = ({ recurrence, onChange, startDate }) => {
-  const [type, setType] = useState(recurrence?.type || ''); 
-  const [interval, setIntervalValue] = useState(recurrence?.interval || 1);
-  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(recurrence?.daysOfWeek || []);
-  const [endDate, setEndDate] = useState(recurrence?.endDate || '');
-
-  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-
-  useEffect(() => {
-    if (type && interval > 0) {
-      const newRule: RecurrenceRule = { type, interval };
-      if (type === 'weekly' && daysOfWeek.length > 0) {
-        newRule.daysOfWeek = daysOfWeek.sort((a,b) => a-b);
-      } else if (type === 'weekly' && startDate && daysOfWeek.length === 0) { 
-         const startDay = parseISO(startDate + 'T00:00:00Z').getDay(); 
-         newRule.daysOfWeek = [startDay];
-      }
-      if (endDate) newRule.endDate = endDate;
-      onChange(newRule);
-    } else {
-      onChange(undefined); 
-    }
-  }, [type, interval, daysOfWeek, endDate, onChange, startDate]);
-
-  const toggleDay = (dayIndex: number) => {
-    setDaysOfWeek(prev => prev.includes(dayIndex) ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex]);
-  };
-  
-  if (type === '') { 
-    return <Button variant="outline" size="sm" onClick={() => setType('weekly')} className="w-full input-field text-xs justify-start font-normal"><Repeat className="w-3 h-3 mr-1.5"/>Set Recurrence</Button>
-  }
-
-  return (
-    <div className="space-y-2 p-3 border border-border-main rounded-md bg-input-bg/50 mt-2">
-      <div className="flex items-center justify-between">
-        <p className="text-xs font-medium text-muted-foreground">Recurrence</p>
-        <Button variant="ghost" size="icon" className="w-5 h-5" onClick={() => { onChange(undefined); setType(''); }}><X className="w-3 h-3"/></Button>
-      </div>
-      <Select value={type} onValueChange={(val) => setType(val as RecurrenceRule['type'])}>
-        <SelectTrigger className="input-field text-xs h-8"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          <SelectItem value="daily">Daily</SelectItem>
-          <SelectItem value="weekly">Weekly</SelectItem>
-          <SelectItem value="monthly">Monthly (on start date's day)</SelectItem>
-          <SelectItem value="yearly">Yearly (on start date)</SelectItem>
-        </SelectContent>
-      </Select>
-      <Input type="number" value={interval} onChange={e => setIntervalValue(Math.max(1, parseInt(e.target.value)))} placeholder="Interval" className="input-field text-xs h-8" />
-      {type === 'weekly' && (
-        <div className="grid grid-cols-4 sm:grid-cols-7 gap-1">
-          {weekDays.map((day, i) => (
-            <Button key={i} variant={daysOfWeek.includes(i) ? 'default': 'outline'} size="sm" onClick={() => toggleDay(i)} className={cn("text-[10px] flex-1 h-7 px-1", daysOfWeek.includes(i) ? 'bg-primary text-primary-foreground' : 'border-border-main')}>
-              {day}
-            </Button>
-          ))}
-        </div>
-      )}
-      <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} placeholder="End Date (optional)" title="Recurrence End Date" className="input-field text-xs h-8" />
-    </div>
-  );
-};
-
-
-interface CalendarFullScreenViewProps {
-  events: AppEvent[];
-  categories: Category[];
-  currentCategory: Category; 
-  onAddEvent: (eventData: Omit<AppEvent, 'id' | 'userId'>) => void;
-  onUpdateEvent: (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id' | 'userId'>>) => void;
-  onDeleteEvent: (eventId: string) => void;
-  onClose: () => void;
-}
-
-interface EventFormData {
-  title: string;
-  date: string; 
-  time: string; 
-  category: Category;
-  description?: string;
-  recurrenceRule?: RecurrenceRule;
-}
-
-export function CalendarFullScreenView({
-  events, categories, currentCategory, onAddEvent, onUpdateEvent, onDeleteEvent, onClose
-}: CalendarFullScreenViewProps) {
-  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
-  const [viewMonth, setViewMonth] = useState<Date>(new Date());
-  const [showEventForm, setShowEventForm] = useState(false);
-  const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
-  const [isPreviewingDescription, setIsPreviewingDescription] = useState(false);
-  
-  // FIX 1: Memoize initialFormCategory
-  const getInitialFormCategory = useCallback(() => {
-    // `currentCategory` here is the prop passed to CalendarFullScreenView,
-    // which in HomePage is already resolved to a specific category or the first available if "All Projects".
-    if (categories.includes(currentCategory)) return currentCategory;
-    const firstSpecificCategory = categories.find(c => c !== "All Projects");
-    if (firstSpecificCategory) return firstSpecificCategory;
-    return categories.length > 0 ? categories[0] : "Personal Life" as Category;
-  }, [currentCategory, categories]);
-
-
-  const [formData, setFormData] = useState<EventFormData>({
-    title: '',
-    date: format(new Date(), 'yyyy-MM-dd'),
-    time: '12:00',
-    category: getInitialFormCategory(),
-    description: '',
-    recurrenceRule: undefined,
-  });
-
-  // FIX 2: Refined useEffect to prevent unnecessary updates
-  useEffect(() => {
-    if (selectedDate && !showEventForm && !editingEvent) {
-      const newCategoryForForm = getInitialFormCategory();
-      const newDateForForm = format(selectedDate, 'yyyy-MM-dd');
-      
-      setFormData(prev => {
-        if (prev.date !== newDateForForm || prev.category !== newCategoryForForm) {
-          return {
-            ...prev,
-            date: newDateForForm,
-            category: newCategoryForForm
-          };
-        }
-        return prev; // No change needed, return previous state reference
-      });
-    }
-  }, [selectedDate, showEventForm, editingEvent, getInitialFormCategory]);
-
-
-  useEffect(() => {
-    if (editingEvent) {
-      const eventDateObj = parseISO(editingEvent.date);
-      setFormData({
-        title: editingEvent.title,
-        date: format(eventDateObj, 'yyyy-MM-dd'),
-        time: format(eventDateObj, 'HH:mm'),
-        category: editingEvent.category,
-        description: editingEvent.description || '',
-        recurrenceRule: editingEvent.recurrenceRule,
-      });
-      setShowEventForm(true);
-      setIsPreviewingDescription(false); // Reset preview state when starting edit
-    }
-  }, [editingEvent]);
-
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
-  
-  const handleCategoryChange = (value: string) => {
-    setFormData(prev => ({ ...prev, category: value as Category }));
-  };
-  const handleRecurrenceChange = (rule: RecurrenceRule | undefined) => {
-    setFormData(prev => ({ ...prev, recurrenceRule: rule}));
-  }
-
-  const handleSubmitEvent = () => {
-    if (!formData.title || !formData.date || !formData.time) return;
-    const dateTimeString = `${formData.date}T${formData.time}:00.000Z`; 
-    
-    const eventDataSubmit = {
-        title: formData.title,
-        date: dateTimeString,
-        category: formData.category,
-        description: formData.description,
-        recurrenceRule: formData.recurrenceRule,
-        // userId will be added by backend
-    };
-
-    if (editingEvent) {
-      onUpdateEvent(editingEvent.id, eventDataSubmit);
-    } else {
-      onAddEvent(eventDataSubmit);
-    }
-    resetForm();
-  };
-
-  const resetForm = () => {
-    setShowEventForm(false);
-    setEditingEvent(null);
-    setIsPreviewingDescription(false);
-    setFormData({
-      title: '',
-      date: selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd'),
-      time: '12:00',
-      category: getInitialFormCategory(),
-      description: '',
-      recurrenceRule: undefined,
-    });
-  };
-  
-  const getNextOccurrence = (event: AppEvent, fromDate: Date): Date | null => {
-    if (!event.recurrenceRule) return null;
-    const rule = event.recurrenceRule;
-    let baseDate = startOfDay(parseISO(event.date)); 
-    let checkDate = startOfDay(fromDate); 
-
-    if (baseDate > checkDate) { 
-        if(rule.type === 'weekly' && rule.daysOfWeek && rule.daysOfWeek.length > 0 && !rule.daysOfWeek.includes(baseDate.getDay())) {
-           // continue
-        } else {
-            if(rule.endDate && baseDate > parseISO(rule.endDate)) return null;
-            return baseDate;
-        }
-    }
-    
-    for(let i=0; i< (rule.count || 365); i++) { 
-        let next: Date;
-        let potentialBase = baseDate;
-        // If baseDate is before checkDate, we need to find the first occurrence of the rule *on or after* checkDate
-        // This is a simplified loop; a full rrule library is better for complex scenarios
-        if (baseDate < checkDate) {
-            let diffMultiplier = 0;
-            switch(rule.type) {
-                case 'daily': diffMultiplier = Math.ceil((checkDate.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24 * rule.interval)); break;
-                case 'weekly': diffMultiplier = Math.ceil((checkDate.getTime() - baseDate.getTime()) / (1000 * 60 * 60 * 24 * 7 * rule.interval)); break;
-                case 'monthly': diffMultiplier = Math.ceil(((checkDate.getFullYear() - baseDate.getFullYear())*12 + (checkDate.getMonth() - baseDate.getMonth())) / rule.interval); break;
-                case 'yearly': diffMultiplier = Math.ceil((checkDate.getFullYear() - baseDate.getFullYear()) / rule.interval); break;
-            }
-            potentialBase = add(baseDate, { 
-                days: rule.type === 'daily' ? rule.interval * Math.max(i, diffMultiplier) : 0,
-                weeks: rule.type === 'weekly' ? rule.interval * Math.max(i, diffMultiplier) : 0,
-                months: rule.type === 'monthly' ? rule.interval * Math.max(i, diffMultiplier) : 0,
-                years: rule.type === 'yearly' ? rule.interval * Math.max(i, diffMultiplier) : 0,
-            });
-        } else {
-            potentialBase = add(baseDate, { 
-                days: rule.type === 'daily' ? rule.interval * i : 0,
-                weeks: rule.type === 'weekly' ? rule.interval * i : 0,
-                months: rule.type === 'monthly' ? rule.interval * i : 0,
-                years: rule.type === 'yearly' ? rule.interval * i : 0,
-            });
-        }
-        next = potentialBase;
-
-        if(rule.type === 'weekly' && rule.daysOfWeek && rule.daysOfWeek.length > 0) {
-            let currentDay = next.getDay();
-            let targetDay = rule.daysOfWeek.find(d => d >= currentDay) ?? rule.daysOfWeek[0];
-            let dayDiff = targetDay - currentDay;
-            if (dayDiff < 0) { // Target day passed for this week iteration
-                next = add(next, { days: 7 - currentDay + targetDay }); // Go to next week's target day if interval is 1
-                                                                    // For intervals > 1, this gets more complex
-            } else {
-                next = add(next, { days: dayDiff });
-            }
-        }
-        next = startOfDay(next);
-
-        if(next >= checkDate) { 
-             if (rule.endDate && next > startOfDay(parseISO(rule.endDate))) return null; 
-            return next;
-        }
-    }
-    return null;
-  };
-
-
-  const DayCellContent: DateFormatter = useCallback((day, options) => { 
-    const dayStart = startOfDay(day);
-    let hasBaseEvent = false;
-    let hasRecurringInstance = false;
-
-    events.forEach(event => {
-        if (!event) return;
-        const eventBaseDate = startOfDay(parseISO(event.date));
-        if (eventBaseDate.getTime() === dayStart.getTime()) {
-            hasBaseEvent = true;
-        }
-        if (event.recurrenceRule) {
-            const next = getNextOccurrence(event, add(dayStart, {days: -1})); 
-            if (next && startOfDay(next).getTime() === dayStart.getTime()) {
-                hasRecurringInstance = true;
-            }
-        }
-    });
-
-    return (
-      <div className="relative w-full h-full flex items-center justify-center">
-        {format(day, "d", { locale: options?.locale })} 
-        {(hasBaseEvent || hasRecurringInstance) && (
-          <span className={cn(
-              "absolute bottom-1.5 left-1/2 -translate-x-1/2 size-1.5 rounded-full",
-              hasBaseEvent && hasRecurringInstance ? "bg-gradient-to-r from-primary to-destructive" :
-              hasBaseEvent ? "bg-primary" : 
-              "bg-primary/50" 
-          )} />
-        )}
-      </div>
-    );
-  }, [events]);
-  
-  const eventsForSelectedDay = selectedDate ? events.flatMap(event => {
-    if (!event) return [];
-    const eventDateObj = parseISO(event.date);
-    const selectedDayStart = startOfDay(selectedDate);
-    const eventDayStart = startOfDay(eventDateObj);
-    
-    const results: AppEvent[] = [];
-    if (eventDayStart.getTime() === selectedDayStart.getTime()) {
-        results.push(event); 
-    }
-    
-    if (event.recurrenceRule) {
-        const next = getNextOccurrence(event, add(selectedDayStart, {days: -1}));
-        if (next && startOfDay(next).getTime() === selectedDayStart.getTime()) {
-            if (eventDayStart.getTime() !== selectedDayStart.getTime()) { 
-                results.push({
-                    ...event,
-                    date: format(selectedDate, 'yyyy-MM-dd') + 'T' + format(eventDateObj, 'HH:mm:ss.SSS') + 'Z', 
-                });
-            }
-        }
-    }
-    return results;
-
-  }).filter((event, index, self) => index === self.findIndex((e) => e.id === event.id && e.date === event.date)) 
-  .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
-
-
-  return (
-    <div className={cn(
-        "fixed inset-0 z-[85] bg-background p-6 flex flex-col",
-        "pt-[calc(5rem+2.75rem+1.5rem)]" 
-    )}>
-        <div className="flex justify-between items-center mb-6">
-            <h2 className="font-orbitron text-3xl accent-text">Calendar</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text p-2 rounded-md hover:bg-input-bg">
-                <X className="w-7 h-7" />
-            </Button>
-        </div>
-
-        <div className="flex-grow flex gap-6 overflow-hidden">
-            <div className="w-2/3 lg:w-3/4 bg-widget-background border border-border-main rounded-md p-6 flex flex-col items-center justify-start custom-scrollbar-fullscreen">
-                <Calendar
-                    mode="single"
-                    selected={selectedDate}
-                    onSelect={setSelectedDate}
-                    month={viewMonth}
-                    onMonthChange={setViewMonth}
-                    className="w-full max-w-2xl" 
-                    classNames={{
-                        root: "w-full", 
-                        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                        month: "space-y-4",
-                        caption: "flex justify-center pt-1 relative items-center h-10 mb-2",
-                        caption_label: "text-xl font-orbitron accent-text",
-                        nav: "space-x-1 flex items-center",
-                        nav_button: cn(
-                            "h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100",
-                            "rounded-md hover:bg-accent/20 text-muted-foreground hover:text-accent-foreground transition-colors",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        ),
-                        nav_button_previous: "absolute left-1",
-                        nav_button_next: "absolute right-1",
-                        table: "w-full border-collapse space-y-1",
-                        head_row: "flex w-full mb-1",
-                        head_cell: "text-muted-foreground rounded-md w-[14.28%] text-xs font-medium p-1 h-8 justify-center",
-                        row: "flex w-full mt-2",
-                        cell: "text-center text-sm p-0 relative w-[14.28%] h-16 sm:h-20 focus-within:relative focus-within:z-20",
-                        day: cn(
-                            "w-full h-full p-0 font-normal rounded-md",
-                            "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
-                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                            "transition-colors"
-                        ),
-                        day_selected: "bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary focus:text-primary-foreground",
-                        day_today: "bg-accent text-accent-foreground ring-1 ring-primary/60",
-                        day_outside: "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
-                        day_disabled: "text-muted-foreground opacity-50 pointer-events-none",
-                    }}
-                    components={{
-                        IconLeft: ({ ...props }) => <ChevronLeft {...props} className="h-5 w-5" />,
-                        IconRight: ({ ...props }) => <ChevronRight {...props} className="h-5 w-5" />,
-                    }}
-                    formatters={{ formatDay: DayCellContent }}
-                    showOutsideDays
-                    fixedWeeks
-                />
-            </div>
-
-            <div className="w-1/3 lg:w-1/4 bg-widget-background border border-border-main rounded-md p-4 flex flex-col space-y-4 overflow-y-auto custom-scrollbar-fullscreen">
-                <Button onClick={() => { setEditingEvent(null); setShowEventForm(true); setIsPreviewingDescription(false); }} className="w-full btn-primary">
-                    <PlusCircle className="w-4 h-4 mr-2"/> Add Event
-                </Button>
-
-                {showEventForm && (
-                    <div className="p-3 border border-border-main rounded-md bg-input-bg/70 space-y-3">
-                        <h3 className="font-orbitron text-lg accent-text">{editingEvent ? 'Edit Event' : 'New Event'}</h3>
-                        <Input name="title" placeholder="Event Title" value={formData.title} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
-                        <div className="flex gap-2">
-                            <Input name="date" type="date" value={formData.date} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
-                            <Input name="time" type="time" value={formData.time} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
-                        </div>
-                        <Select name="category" value={formData.category} onValueChange={handleCategoryChange} disabled={isPreviewingDescription}>
-                            <SelectTrigger className="input-field"><SelectValue placeholder="Category" /></SelectTrigger>
-                            <SelectContent className="bg-widget-background border-border-main">
-                                {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
-                        <div>
-                            <div className="flex justify-between items-center mb-1">
-                                <label htmlFor="event-description" className="text-xs text-muted-foreground">Description (Markdown)</label>
-                                <div>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-6 px-1">Help</Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="p-0 w-auto"><MarkdownCheatsheet/></PopoverContent>
-                                    </Popover>
-                                    <Button variant="ghost" size="icon" onClick={() => setIsPreviewingDescription(!isPreviewingDescription)} className="w-6 h-6 ml-1">
-                                        {isPreviewingDescription ? <Pencil className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
-                                    </Button>
-                                </div>
-                            </div>
-                            {isPreviewingDescription ? (
-                                <div className="prose prose-sm dark:prose-invert max-w-none p-2 min-h-[60px] border border-dashed border-border-main rounded-md bg-background/50">
-                                    <ReactMarkdown>{formData.description || "Nothing to preview..."}</ReactMarkdown>
-                                </div>
-                            ) : (
-                                <Textarea id="event-description" name="description" placeholder="Details... (Markdown supported)" value={formData.description || ''} onChange={handleInputChange} className="input-field min-h-[60px]"/>
-                            )}
-                        </div>
-                        {!isPreviewingDescription && <EventRecurrenceEditor recurrence={formData.recurrenceRule} onChange={handleRecurrenceChange} startDate={formData.date}/>}
-                        <div className="flex gap-2 pt-2">
-                            <Button onClick={handleSubmitEvent} className="flex-grow btn-primary" disabled={isPreviewingDescription}>{editingEvent ? 'Save Changes' : 'Add Event'}</Button>
-                            <Button variant="outline" onClick={resetForm} className="border-border-main text-muted-foreground hover:bg-background">Cancel</Button>
-                        </div>
-                    </div>
-                )}
-
-                {!showEventForm && selectedDate && (
-                    <div>
-                        <h3 className="font-orbitron text-lg accent-text mb-2">
-                            Events for: {format(selectedDate, 'MMM d, yyyy')}
-                        </h3>
-                        {eventsForSelectedDay.length > 0 ? (
-                            <ul className="space-y-2">
-                                {eventsForSelectedDay.map((event, idx) => ( 
-                                    <li key={`${event.id}-${idx}`} className="p-2.5 bg-input-bg/70 border border-border-main rounded-md">
-                                        <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-semibold text-sm text-foreground">{event.title}</p>
-                                                <p className="text-xs text-muted-foreground">
-                                                    {format(parseISO(event.date), 'p')} - {event.category}
-                                                    {event.recurrenceRule && <Repeat className="w-3 h-3 inline ml-1.5 text-muted-foreground/70"/>}
-                                                </p>
-                                            </div>
-                                            <div className="flex gap-1 shrink-0">
-                                                <Button variant="ghost" size="icon" onClick={() => { setEditingEvent(events.find(e=>e.id === event.id) || event) }} className="btn-icon w-6 h-6"><Edit className="w-3.5 h-3.5"/></Button>
-                                                <Button variant="ghost" size="icon" onClick={() => onDeleteEvent(event.id)} className="btn-icon danger w-6 h-6"><Trash2 className="w-3.5 h-3.5"/></Button>
-                                            </div>
-                                        </div>
-                                        {event.description && (
-                                            <div className="prose prose-sm dark:prose-invert max-w-none mt-1 pt-1 border-t border-border-main/50 text-foreground">
-                                               <ReactMarkdown>{event.description}</ReactMarkdown>
-                                            </div>
-                                        )}
-                                    </li>
-                                ))}
-                            </ul>
-                        ) : (
-                            <p className="text-sm text-muted-foreground text-center py-4">No events for this day.</p>
-                        )}
-                    </div>
-                )}
-                 {!showEventForm && !selectedDate && (
-                    <p className="text-sm text-muted-foreground text-center py-4">Select a date to see events.</p>
-                )}
-            </div>
-        </div>
-    </div>
-  );
-}
-
-```
-
 ## src/middleware.ts
 
 ```
@@ -5735,23 +5021,93 @@ export function AyandaLogoIcon({ className }: AyandaLogoIconProps) {
 ```typescript
 "use client";
 
-import React, { useState } from 'react';
-import { Send } from 'lucide-react';
+import React, { useState, useRef, useEffect } from 'react';
+import { Send, Mic, Square } from 'lucide-react'; // Added Mic, Square
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
 
 interface FooterChatProps {
   onSendCommand: (command: string) => void;
+  onSendAudioCommand: (audioBase64: string, mimeType: string) => void; // New prop for audio
+  isProcessingAi: boolean; // To disable input during AI processing
 }
 
-export function FooterChat({ onSendCommand }: FooterChatProps) {
+export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }: FooterChatProps) {
   const [message, setMessage] = useState('');
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [recordingError, setRecordingError] = useState<string | null>(null);
 
-  const handleSend = () => {
+  useEffect(() => {
+    // Clean up MediaRecorder on component unmount if it's active
+    return () => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+        mediaRecorderRef.current.stop();
+      }
+    };
+  }, []);
+
+
+  const handleTextSend = () => {
     if (message.trim()) {
       onSendCommand(message.trim());
       setMessage('');
+    }
+  };
+
+  const startRecording = async () => {
+    setRecordingError(null);
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          audioChunksRef.current.push(event.data);
+        };
+
+        mediaRecorderRef.current.onstop = () => {
+          const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = () => {
+            const base64Audio = reader.result as string;
+            // remove 'data:audio/webm;base64,' part
+            const pureBase64 = base64Audio.substring(base64Audio.indexOf(',') + 1);
+            onSendAudioCommand(pureBase64, mediaRecorderRef.current?.mimeType || 'audio/webm');
+          };
+          audioChunksRef.current = [];
+          // Stop all tracks on the stream to release the microphone
+          stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorderRef.current.start();
+        setIsRecording(true);
+      } catch (err) {
+        console.error("Error accessing microphone:", err);
+        setRecordingError("Microphone access denied or an error occurred. Please check permissions.");
+        setIsRecording(false);
+      }
+    } else {
+      setRecordingError("Audio recording is not supported by your browser.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
+
+  const handleMicClick = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
     }
   };
 
@@ -5764,33 +5120,59 @@ export function FooterChat({ onSendCommand }: FooterChatProps) {
         "border border-[var(--border-color-val)] rounded-full",
         "pl-5 pr-2 py-2",
         "shadow-[0_10px_30px_rgba(0,0,0,0.5)]",
-        "flex items-center"
+        "flex items-center gap-2" // Added gap for mic button
       )}
     >
-      <Input
-        type="text"
-        value={message}
-        onChange={(e) => setMessage(e.target.value)}
-        placeholder="AYANDA, what can I help you with?"
-        className={cn(
-          "flex-grow bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0",
-          "text-[var(--text-color-val)] text-[0.925rem] placeholder:text-[var(--text-muted-color-val)]"
-        )}
-        onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-      />
+      {recordingError && <p className="text-xs text-destructive px-2">{recordingError}</p>}
+      {!isRecording && (
+        <Input
+          type="text"
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          placeholder="AYANDA, what can I help you with?"
+          className={cn(
+            "flex-grow bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0",
+            "text-[var(--text-color-val)] text-[0.925rem] placeholder:text-[var(--text-muted-color-val)]"
+          )}
+          onKeyPress={(e) => e.key === 'Enter' && handleTextSend()}
+          disabled={isProcessingAi || isRecording}
+        />
+      )}
+      {isRecording && (
+        <div className="flex-grow flex items-center justify-center h-full">
+          <span className="text-sm text-[var(--accent-color-val)] animate-pulse">Recording... Click mic to stop.</span>
+        </div>
+      )}
+
       <Button 
         size="icon"
-        onClick={handleSend} 
+        onClick={handleMicClick} 
         className={cn(
-          "bg-[var(--accent-color-val)] text-[var(--background-color-val)] hover:bg-[#00B8D4]",
+          isRecording ? "bg-destructive text-white hover:bg-destructive/90" : "bg-transparent text-[var(--text-muted-color-val)] hover:text-[var(--accent-color-val)]",
           "rounded-full w-10 h-10",
-          "flex items-center justify-center shrink-0 ml-2"
+          "flex items-center justify-center shrink-0"
         )}
-        disabled={!message.trim()}
-        aria-label="Submit AI Input"
+        disabled={isProcessingAi && !isRecording} // Allow stopping recording even if AI is processing previous command
+        aria-label={isRecording ? "Stop Recording" : "Start Recording"}
       >
-        <Send className="w-5 h-5" />
+        {isRecording ? <Square className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
       </Button>
+
+      {!isRecording && (
+        <Button 
+          size="icon"
+          onClick={handleTextSend} 
+          className={cn(
+            "bg-[var(--accent-color-val)] text-[var(--background-color-val)] hover:bg-[#00B8D4]",
+            "rounded-full w-10 h-10",
+            "flex items-center justify-center shrink-0"
+          )}
+          disabled={!message.trim() || isProcessingAi || isRecording}
+          aria-label="Submit AI Input"
+        >
+          <Send className="w-5 h-5" />
+        </Button>
+      )}
     </div>
   );
 }
@@ -6891,6 +6273,7 @@ import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenVie
 import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
+import type { Part } from '@google/generative-ai'; // Import Part type
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
@@ -6910,7 +6293,8 @@ export default function HomePage() {
   
   const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
 
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(true); // General loading for data fetches
+  const [isProcessingAi, setIsProcessingAi] = useState(false); // Specific for AI command processing
   const [initialLoadDone, setInitialLoadDone] = useState(false);
   const [aiMessage, setAiMessage] = useState<string | null>(null);
 
@@ -6977,6 +6361,7 @@ export default function HomePage() {
     }
   }, [fetchData, initialLoadDone, status]); 
 
+  // --- CRUD Handlers (unchanged from previous versions) ---
   const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed' | 'userId' | 'createdAt'>) => {
     if (status !== "authenticated") return;
     const res = await fetch('/api/tasks', {
@@ -6998,21 +6383,16 @@ export default function HomePage() {
     let updatePayload: Partial<Task>;
 
     if (subTaskId) {
-        // Toggle a subtask
         const updatedSubTasks = (task.subTasks || []).map(st => 
             st.id === subTaskId ? { ...st, completed: !st.completed } : st
         );
         updatePayload = { subTasks: updatedSubTasks };
-        // Check if all subtasks are completed to mark parent task as completed
         const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
         if (updatedSubTasks.length > 0 && allSubTasksCompleted !== task.completed) {
             updatePayload.completed = allSubTasksCompleted;
         }
     } else {
-        // Toggle the parent task
         updatePayload = { completed: !task.completed };
-        // If parent task is marked complete, all subtasks should also be marked complete
-        // If parent task is marked incomplete, subtasks remain as they are (or could be all marked incomplete too - user preference)
         if (updatePayload.completed && task.subTasks && task.subTasks.length > 0) {
             updatePayload.subTasks = task.subTasks.map(st => ({ ...st, completed: true }));
         }
@@ -7036,11 +6416,10 @@ export default function HomePage() {
   
   const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id' | 'userId'>>) => {
     if (status !== "authenticated") return;
-    // Ensure subtasks being sent for update have IDs
     if (taskUpdateData.subTasks) {
         taskUpdateData.subTasks = taskUpdateData.subTasks.map(st => ({
             ...st,
-            id: st.id || uuidv4() // Assign ID if missing (e.g., newly added subtask in edit modal)
+            id: st.id || uuidv4() 
         }));
     }
     const res = await fetch(`/api/tasks/${taskId}`, {
@@ -7136,16 +6515,18 @@ export default function HomePage() {
     if (res.ok) { fetchData(currentCategory); setAiMessage(`Event deleted.`); } 
     else { setAiMessage(`Failed to delete event.`); }
   };
+  // --- END CRUD Handlers ---
 
-  const handleAiInputCommand = async (command: string) => {
+
+  const processAiCommandWithParts = async (inputParts: Part[]) => {
     if (status !== "authenticated") return;
-    setIsLoading(true); 
-    setAiMessage(`AIDA is processing your command...`); 
+    setIsProcessingAi(true);
+    setAiMessage(`AIDA is processing your input...`); 
 
     const res = await fetch('/api/ai', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command, currentCategory }),
+        body: JSON.stringify({ parts: inputParts, currentCategory }), // Send parts directly
     });
     
     if (res.ok) {
@@ -7156,8 +6537,20 @@ export default function HomePage() {
         const errorResult = await res.json().catch(() => ({message: "AI command failed with an unknown error."}));
         setAiMessage(errorResult.message || "AI command failed.");
     }
-    setIsLoading(false);
+    setIsProcessingAi(false);
   };
+
+  const handleTextCommand = (command: string) => {
+    const textPart: Part = { text: command };
+    processAiCommandWithParts([textPart]);
+  };
+
+  const handleAudioCommand = (audioBase64: string, mimeType: string) => {
+    const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
+    const instructionPart: Part = { text: "This is an audio command. Please process it and respond with JSON operations as AYANDA assistant." };
+    processAiCommandWithParts([audioPart, instructionPart]);
+  };
+
 
   const onCategoryChange = (category: Category) => {
     setCurrentCategory(category);
@@ -7165,10 +6558,8 @@ export default function HomePage() {
   };
 
   const navigateToItemHandler = (type: 'tasks' | 'calendar' | 'notes' | 'goals', id: string) => {
-    // This handler is for the DueSoonWidget to navigate to the full view
-    // It might need to also pass the ID to the view or handle focusing the item
     setViewMode(type); 
-    router.push(`/?view=${type}&id=${id}`, { scroll: false }); // Update URL for potential deep linking
+    router.push(`/?view=${type}&id=${id}`, { scroll: false });
   };
 
   const renderView = () => {
@@ -7271,12 +6662,16 @@ export default function HomePage() {
       >
         {renderView()}
       </main>
-      {status === "authenticated" && <FooterChat onSendCommand={handleAiInputCommand} />}
+      {status === "authenticated" && (
+        <FooterChat 
+            onSendCommand={handleTextCommand} 
+            onSendAudioCommand={handleAudioCommand}
+            isProcessingAi={isProcessingAi}
+        />
+      )}
     </div>
   );
 }
-
-
 
 ```
 
@@ -8261,15 +7656,16 @@ import NoteModel from '@/models/NoteModel';
 import GoalModel from '@/models/GoalModel';
 import EventModel from '@/models/EventModel';
 import { getToken } from 'next-auth/jwt';
+import type { Part } from '@google/generative-ai'; // Import Part type
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 
 async function findTaskByName(userId: string, taskName: string, category?: Category): Promise<Task | null> {
-    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } }; // Case-insensitive exact match
+    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } };
     if (category && category !== "All Projects") {
         query.category = category;
     }
-    return TaskModel.findOne(query).lean(); // .lean() for plain JS object
+    return TaskModel.findOne(query).lean();
 }
 
 
@@ -8282,19 +7678,21 @@ export async function POST(request: NextRequest) {
 
   await dbConnect();
   try {
-    const { command, currentCategory } = await request.json();
+    // Expect 'parts' instead of 'command'
+    const { parts, currentCategory } = await request.json();
 
-    if (!command || typeof command !== 'string') {
-      return NextResponse.json({ message: 'Command is required and must be a string.' }, { status: 400 });
+    if (!parts || !Array.isArray(parts) || parts.length === 0) {
+      return NextResponse.json({ message: 'Input parts are required.' }, { status: 400 });
     }
     if (!currentCategory || typeof currentCategory !== 'string') {
       return NextResponse.json({ message: 'currentCategory is required and must be a string.' }, { status: 400 });
     }
 
-    const geminiResult: GeminiProcessedResponse = await processWithGemini(command, currentCategory as Category, ["All Projects", ...baseAvailableCategories]);
+    // Pass the 'parts' array directly to processWithGemini
+    const geminiResult: GeminiProcessedResponse = await processWithGemini(parts as Part[], currentCategory as Category, ["All Projects", ...baseAvailableCategories]);
 
     if (geminiResult.overallError || geminiResult.operations.length === 0) {
-      return NextResponse.json({ message: 'AI could not process the command.', details: geminiResult.overallError || "No operations returned from AI.", originalCommand: command }, { status: 422 });
+      return NextResponse.json({ message: 'AI could not process the command.', details: geminiResult.overallError || "No operations returned from AI.", originalInput: parts }, { status: 422 });
     }
 
     let createdItemsInfo: { type: string; summary: string; success: boolean; error?: string }[] = [];
@@ -8335,10 +7733,10 @@ export async function POST(request: NextRequest) {
 
             if (taskToUpdateId) {
                 taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId });
-            } else if (operation.payload.text) { // AI provided task name instead of ID
+            } else if (operation.payload.text) { 
                 taskInstance = await findTaskByName(userId, operation.payload.text, effectiveCategory as Category);
                 if (taskInstance) {
-                    taskToUpdateId = taskInstance.id; // Found the ID
+                    taskToUpdateId = taskInstance.id; 
                 }
             }
 
@@ -8354,8 +7752,7 @@ export async function POST(request: NextRequest) {
                 taskInstance.subTasks = [...(taskInstance.subTasks || []), ...newSubTasksForExisting];
                 updated = true;
             }
-            // Handle other direct updates to the task if AI provides them
-            if (operation.payload.text && operation.payload.text !== taskInstance.text) { // only update if text is different and not just used for lookup
+            if (operation.payload.text && operation.payload.text !== taskInstance.text) {
                 taskInstance.text = operation.payload.text;
                 updated = true;
             }
@@ -8442,7 +7839,7 @@ export async function POST(request: NextRequest) {
           case 'suggestion':
             if (operation.payload.message) {
               aiMessageForCard = operation.payload.message;
-              if (geminiResult.operations.length === 1) { // If this is the *only* operation
+              if (geminiResult.operations.length === 1) { 
                  createdItemsInfo.push({ type: operation.action, summary: operation.payload.message, success: true});
               }
             }
@@ -8469,14 +7866,14 @@ export async function POST(request: NextRequest) {
         responseMessage = successfulActions.map(s => `${s.type} "${s.summary}..." processed`).join('. ') + ". ";
     }
     
-    if (aiMessageForCard) { // If there's a specific clarification/suggestion message from a dedicated operation
-        responseMessage = aiMessageForCard; // This message takes precedence if it's the only "successful" thing
+    if (aiMessageForCard) { 
+        responseMessage = aiMessageForCard; 
     }
     
     if (createdItemsInfo.some(item => !item.success)) {
         const failures = createdItemsInfo.filter(item => !item.success);
         responseMessage += (responseMessage ? " " : "") + "Some operations failed: " + failures.map(f => `${f.type} (${f.error || 'Unknown error'})`).join('. ') + ".";
-        hasErrors = true; // Ensure hasErrors is true if any operation failed
+        hasErrors = true; 
     }
     
     if (responseMessage.trim() === "") {
@@ -8486,16 +7883,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ 
         message: responseMessage.trim(), 
         details: createdItemsInfo, 
-        originalCommand: command 
-    }, { status: hasErrors && !createdItemsInfo.some(i=>i.success) ? 422 : 200 }); // 422 if all ops failed or only unknown/error ops
+        originalInput: parts 
+    }, { status: hasErrors && !createdItemsInfo.some(i=>i.success) ? 422 : 200 });
 
   } catch (error) {
     console.error('Error in AI command processing API:', error);
     return NextResponse.json({ message: 'Failed to process AI command.', error: (error as Error).message }, { status: 500 });
   }
 }
-
-
 
 ```
 
@@ -8762,10 +8157,12 @@ export const defaultFontKey = 'inter';
 
 ```
 import {
-  GoogleGenerativeAI, // Correct class name
+  GoogleGenerativeAI,
   HarmCategory,
   HarmBlockThreshold,
-} from "@google/generative-ai"; // Correct package name
+  Part, // Import Part type
+  GenerateContentRequest,
+} from "@google/generative-ai"; 
 
 import { Category, Task, Goal, Note, Event as AppEvent, RecurrenceRule, SubTask } from '@/types';
 import { format, addDays, parseISO, isValid } from 'date-fns';
@@ -8776,36 +8173,21 @@ if (!API_KEY) {
   throw new Error('Please define the GEMINI_API_KEY environment variable inside .env.local');
 }
 
-// Use the new SDK initialization - API key is passed directly
 const genAI = new GoogleGenerativeAI(API_KEY);
 
-// Define generationConfig and safetySettings objects
-// These were missing in the original code snippet
 const generationConfig = {
-  temperature: 0.7, // Example value
-  topP: 0.95,       // Example value
-  topK: 60,         // Example value
-  maxOutputTokens: 1024, // Example value
-  responseMimeType: "application/json", // Ensure JSON output
+  temperature: 0.7,
+  topP: 0.95,
+  topK: 60,
+  maxOutputTokens: 2048, // Increased slightly for potentially complex JSON from audio
+  responseMimeType: "application/json",
 };
 
 const safetySettings = [
-  {
-    category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-    threshold: HarmBlockThreshold.BLOCK_NONE, // Example threshold
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-    threshold: HarmBlockThreshold.BLOCK_NONE, // Example threshold
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-    threshold: HarmBlockThreshold.BLOCK_NONE, // Example threshold
-  },
-  {
-    category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-    threshold: HarmBlockThreshold.BLOCK_NONE, // Example threshold
-  },
+  { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE, },
+  { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE, },
+  { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE, },
+  { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE, },
 ];
 
 
@@ -8815,203 +8197,105 @@ function getTomorrowsDate() { return format(addDays(new Date(), 1), 'yyyy-MM-dd'
 export interface AiOperation {
   action: "addTask" | "addNote" | "addGoal" | "addEvent" | "updateTask" | "unknown" | "clarification" | "suggestion";
   payload: Partial<Task & Note & Goal & AppEvent & {
-    taskIdToUpdate?: string; // For updateTask action
-    text?: string; name?: string; title?: string; content?: string; // Basic fields
-    targetValue?: number; unit?: string; // Goal specific
-    date?: string; description?: string; // Event specific
-    dueDate?: string; // Task specific
+    taskIdToUpdate?: string; 
+    text?: string; name?: string; title?: string; content?: string; 
+    targetValue?: number; unit?: string; 
+    date?: string; description?: string; 
+    dueDate?: string; 
     category?: Category;
-    message?: string; // For clarification/suggestion
+    message?: string; 
     recurrenceRule?: RecurrenceRule;
-    subTasks?: { text: string }[]; // For creating tasks with subtasks
-    subTasksToAdd?: { text: string }[]; // For adding subtasks to an existing task
-    subTasksToRemove?: string[]; // IDs of subtasks to remove
-    subTasksToUpdate?: { id: string; text?: string; completed?: boolean }[]; // For updating existing subtasks
+    subTasks?: { text: string }[]; 
+    subTasksToAdd?: { text: string }[]; 
+    subTasksToRemove?: string[]; 
+    subTasksToUpdate?: { id: string; text?: string; completed?: boolean }[]; 
   }>;
-  error?: string; // Error is at the top level of AiOperation
+  error?: string; 
 }
 
 export interface GeminiProcessedResponse {
   operations: AiOperation[];
-  originalCommand: string;
+  originalInput: Part[]; // Changed from originalCommand to originalInput
   overallError?: string;
 }
 
+// Modified to accept Part[] for multimodal input
 export async function processWithGemini(
-    command: string,
+    inputParts: Part[], // Now accepts an array of Parts (text, audio, etc.)
     currentCategory: Category,
     availableCategories: Category[]
 ): Promise<GeminiProcessedResponse> {
-  // Log the user command
-  console.log("User Command:", command);
+  console.log("Input Parts to Gemini:", JSON.stringify(inputParts, null, 2));
 
   const today = getTodaysDate();
   const tomorrow = getTomorrowsDate();
 
-  // The core persona and instruction for JSON output format become the system instruction
-  // This should be a single string in the latest SDK
-  const systemInstruction = `You MUST ONLY return a JSON object with a top-level field named "operations". This field MUST be an ARRAY of objects. Each object in the array represents a distinct action to be taken.
+  const systemInstructionText = `You MUST ONLY return a JSON object with a top-level field named "operations". This field MUST be an ARRAY of objects. Each object in the array represents a distinct action to be taken.
 
-You are AYANDA, an AI assistant. Your primary goal is to accurately convert the user's specific command into this structured JSON object format.
+You are AYANDA, an AI assistant. Your primary goal is to accurately convert the user's input (which could be text, audio, or a combination) into this structured JSON object format.
 Today's date is ${today}. Tomorrow's date is ${tomorrow}.
 
 Each operation object MUST have "action" and "payload" fields.
 "action" can be: "addTask", "addNote", "addGoal", "addEvent", "updateTask", "clarification", "suggestion", or "unknown".
-"payload" contains details for that action. Your interpretation MUST be based on the user's command.
+"payload" contains details for that action. Your interpretation MUST be based on the user's input.
 
+If the input includes audio, understand the speech from the audio to determine the user's intent.
 DO NOT return any other JSON structure or conversational text outside of the "operations" array JSON.
-DO NOT attempt to interpret the user's command as an external action or tool call (e.g., do not return JSON for finding an object, setting a timer, etc.).
-If a command does not fit one of the defined actions ("addTask", "addNote", "addGoal", "addEvent", "updateTask", "clarification", "suggestion"), you MUST use the "unknown" action and provide a message or error in the payload. This is the ONLY acceptable output for unclear commands.
+DO NOT attempt to interpret the user's command as an external action or tool call.
+If input does not fit defined actions, you MUST use "unknown" action with a message/error in payload. This is the ONLY acceptable output for unclear commands.
 
 Available categories for items are: ${availableCategories.join(", ")}.
-If the user specifies a category, use it. If not, and the command implies a category, try to infer it.
+If the user specifies a category (in text or speech), use it. If not, and the command implies a category, try to infer it.
 If no category is specified or can be reasonably inferred for an item, use the current category: "${currentCategory}". If currentCategory is "All Projects", try to pick a more specific one from the available list for that item, or use the first available specific category if unsure (e.g., "Personal Life").
 
-Field details for "payload" based on "action":
-- "addTask":
-  - "text": (string, required) Task description.
-  - "dueDate": (string, optional,-MM-DD format) Infer date. This is the start date for recurring tasks.
-  - "category": (string, required) Category.
-  - "subTasks": (array of objects, optional) For creating subtasks with a NEW task. Each object: { "text": "subtask description" }.
-  - "recurrenceRule": (object, optional) With "type" ('daily', 'weekly', 'monthly', 'yearly'), "interval" (number), and optional "daysOfWeek" (array of numbers 0-6 for weekly), "dayOfMonth" (number for monthly), "endDate" (YYYY-MM-DD), "count" (number).
-- "addNote":
-  - "title": (string, optional) Note title.
-  - "content": (string, required) Note content. Can include Markdown.
-  - "category": (string, required) Category.
-- "addGoal":
-  - "name": (string, required) Goal name.
-  - "targetValue": (number, required) Target.
-  - "unit": (string, required) Unit.
-  - "currentValue": (number, defaults to 0) Current progress.
-  - "category": (string, required) Category.
-- "addEvent":
-  - "title": (string, required) Event title.
-  - "date": (string, required, ISO 8601 format:-MM-DDTHH:mm:ss.sssZ or-MM-DDTHH:mm) Event start date & time. Default time to 12:00 PM if only date given. This is the start for recurring events.
-  - "description": (string, optional) Description.
-  - "category": (string, required) Category.
-  - "recurrenceRule": (object, optional) Same structure as for tasks.
-- "updateTask":
-  - "taskIdToUpdate": (string, optional) ID of the task if known or clearly implied by the user's command (e.g., "update task ID 123"). If the user refers to a task by name (e.g., "add subtask to 'Project X'"), you can set the "text" field to "Project X" and OMIT "taskIdToUpdate". The system will try to find it.
-  - "text": (string, optional) New task description or the name of the task to find if taskIdToUpdate is not known.
-  - "dueDate": (string, optional,-MM-DD format) New due date.
-  - "category": (string, optional) New category.
-  - "completed": (boolean, optional) New completion status.
-  - "subTasksToAdd": (array of objects, optional) For ADDING subtasks to an EXISTING task. Each object: { "text": "subtask description" }.
-  - "recurrenceRule": (object, optional) New or updated recurrence rule.
-- "clarification" or "suggestion":
-  - "message": (string, required) Message to display.
-- "unknown":
-  - "error": (string, optional) Brief explanation.
-  - "message": (string, optional) General message.
+Field details for "payload" (same as before, ensure all types are handled, especially dates).
+Example "addEvent" with date and time: { "title": "Meeting with Team", "date": "YYYY-MM-DDTHH:mm:00.000Z" ... }
+If only date given, default time to 12:00 PM. If only time, assume today's date.
 
-Infer recurrence from phrases like "every day", "weekly on Tuesdays", "monthly on the 15th", "every 2 weeks".
-For weekly recurrence, "daysOfWeek" should be an array of numbers (Sunday=0, Monday=1, ..., Saturday=6).
-
-Example 1 (New task with subtasks): User says "Create a task to organize my study notes with subtasks: review lecture 1, summarize chapter 2, create flashcards for key terms."
-JSON Output:
-{
-  "operations": [
-    {
-      "action": "addTask",
-      "payload": {
-        "text": "Organize my study notes",
-        "category": "Studies",
-        "subTasks": [
-          { "text": "review lecture 1" },
-          { "text": "summarize chapter 2" },
-          { "text": "create flashcards for key terms" }
-        ]
-      }
-    }
-  ]
-}
-
-Example 2 (Add subtasks to an existing task named 'Client Presentation'): User says "Add subtasks to 'Client Presentation': final run-through and check equipment."
-JSON Output:
-{
-  "operations": [
-    {
-      "action": "updateTask",
-      "payload": {
-        "text": "Client Presentation", // Task name to find
-        "subTasksToAdd": [
-          { "text": "final run-through" },
-          { "text": "check equipment" }
-        ]
-      }
-    }
-  ]
-}
-
-Example 3 (Simple task): User says "remind me to call John tomorrow at 2 PM about the project"
-JSON Output:
-{
-    "operations": [
-        {
-            "action": "addEvent",
-            "payload": {
-                "title": "Call John about the project",
-                "date": "${tomorrow}T14:00:00.000Z",
-                "category": "${currentCategory === "All Projects" ? "Personal Life" : currentCategory}"
-            }
-        }
-    ]
-}
-
-If the command is very unclear or does not fit any of the defined actions, you MUST return: { "operations": [ { "action": "unknown", "payload": { "message": "I couldn't understand how to convert that command into a task, note, goal, or event. Can you please rephrase?" } } ] }.
-`; // System instruction as a single string
-
-
-  // The user-specific part of the prompt
-  const userContent = `User Command: "${command}"\nJSON Output:\n `;
-
+If the input is audio and it's unclear, or not a command, use "clarification" or "unknown" action.
+For example, if audio is just "hello", respond with { "operations": [ { "action": "clarification", "payload": { "message": "Hello! How can I help you today?" } } ] }.
+If audio is background noise, use { "operations": [ { "action": "unknown", "payload": { "message": "I couldn't understand the audio. Please try again." } } ] }.
+`;
 
   try {
-    // Get the generative model instance
-    const model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash", // Changed model to 2.0-flash
-      systemInstruction: systemInstruction, // Pass system instruction directly
-    });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-    // Generate content, passing config and safety settings directly
-    const result = await model.generateContent({
-        contents: [{ role: "user", parts: [{ text: userContent }] }], // User content here
-        generationConfig: generationConfig, // Pass generationConfig directly
-        safetySettings: safetySettings, // Pass safetySettings directly
-    });
-
-    // Access text using result.response.text()
+    const request: GenerateContentRequest = {
+        contents: [{ role: "user", parts: inputParts }],
+        generationConfig: generationConfig,
+        safetySettings: safetySettings,
+        systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] } 
+        // Using object structure for systemInstruction as it's more robust.
+        // Some SDK versions might allow string directly. If `parts: [{text...}]` causes issues,
+        // can try `systemInstruction: systemInstructionText` directly.
+    };
+    
+    const result = await model.generateContent(request);
     let responseText = result.response.text();
 
-    // Log the raw AI response text
     console.log("Raw AI Response Text:", responseText);
 
-    // Ensure responseText is a string before processing
     if (typeof responseText !== 'string') {
         console.error(`Expected string response, but got: ${typeof responseText}`);
         return {
             operations: [{ action: "unknown", payload: { error: "AI response format error: Did not receive a string response.", message: String(responseText) } }],
-            originalCommand: command,
+            originalInput: inputParts,
             overallError: "AI response format error: Did not receive a string response."
         };
     }
 
-    // Attempt to extract JSON from a markdown code block if present
     const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
     if (jsonMatch && jsonMatch[1]) {
         responseText = jsonMatch[1];
     } else {
-        // If not wrapped, trim whitespace just in case
         responseText = responseText.trim();
     }
 
-    // Added a check to see if the response starts with '{' to quickly identify non-JSON issues
     if (!responseText.startsWith('{')) {
        console.error(`Expected JSON response (starting with '{'), but got: ${responseText.substring(0, 200)}...`);
-       // If it doesn't look like JSON at all, return an unknown operation
        return {
            operations: [{ action: "unknown", payload: { error: "AI response format error: Did not receive a JSON object.", message: responseText } }],
-           originalCommand: command,
+           originalInput: inputParts,
            overallError: "AI response format error: Did not receive a JSON object."
        };
     }
@@ -9020,7 +8304,6 @@ If the command is very unclear or does not fit any of the defined actions, you M
 
     if (!parsedJson.operations || !Array.isArray(parsedJson.operations)) {
         console.warn("Gemini did not return operations as an array. Response:", responseText);
-        // If the structure is wrong, force it into the expected format with an 'unknown' action
         parsedJson = { operations: [ { action: "unknown", payload: { error: "AI response format error: Expected 'operations' array.", message: responseText } } ] };
     }
 
@@ -9028,20 +8311,16 @@ If the command is very unclear or does not fit any of the defined actions, you M
         let { action, payload } = op;
         if (!payload) payload = {};
 
-        // Post-process category: Ensure a specific category is assigned if "All Projects" was the context
         if ((payload.category === "All Projects" || !payload.category) &&
             action !== 'clarification' && action !== 'suggestion' && action !== 'unknown') {
-
             if (currentCategory !== "All Projects" && availableCategories.includes(currentCategory)) {
                 payload.category = currentCategory;
             } else {
-                // If currentCategory is "All Projects" or not in available, pick first specific one
                 const firstSpecificCategory = availableCategories.find(cat => cat !== "All Projects");
-                payload.category = firstSpecificCategory || (availableCategories.length > 0 && availableCategories[0] !== "All Projects" ? availableCategories[0] : "Personal Life"); // Final fallback
+                payload.category = firstSpecificCategory || (availableCategories.length > 0 && availableCategories[0] !== "All Projects" ? availableCategories[0] : "Personal Life");
             }
         }
 
-        // Validate/format dates
         if ((action === "addTask" || action === "updateTask") && payload.dueDate) {
             try {
                 const parsedDate = parseISO(payload.dueDate as string);
@@ -9050,25 +8329,20 @@ If the command is very unclear or does not fit any of the defined actions, you M
         }
         if (action === "addEvent" && payload.date) {
             try {
-                // Attempt to parse, allowing for-MM-DD or full ISO
                 let parsedEventDate = parseISO(payload.date as string);
                 if (!isValid(parsedEventDate) && (payload.date as string).match(/^\d{4}-\d{2}-\d{2}$/)) {
-                    // If it's just a date, append a default time (e.g., noon) before parsing
                     parsedEventDate = parseISO(`${payload.date}T12:00:00.000Z`);
                 }
                 payload.date = isValid(parsedEventDate) ? parsedEventDate.toISOString() : undefined;
             } catch (e) { payload.date = undefined; }
         }
-        // Validate recurrenceRule dates
         if (payload.recurrenceRule?.endDate) {
             try {
                 const parsedEndDate = parseISO(payload.recurrenceRule.endDate as string);
                 payload.recurrenceRule.endDate = isValid(parsedEndDate) ? format(parsedEndDate, 'yyyy-MM-dd') : undefined;
             } catch (e) { if (payload.recurrenceRule) payload.recurrenceRule.endDate = undefined; }
         }
-
-        // Return the AiOperation object with error at the top level
-        // Ensure error is only included if it exists in the original op object
+        
         const operation: AiOperation = { action, payload };
         if (op.error !== undefined) {
             operation.error = op.error;
@@ -9076,14 +8350,14 @@ If the command is very unclear or does not fit any of the defined actions, you M
         return operation;
     });
 
-    return { operations: processedOperations, originalCommand: command };
+    return { operations: processedOperations, originalInput: inputParts };
 
   } catch (error) {
     console.error("Error processing with Gemini:", error);
     const errorMessage = `Gemini API error or JSON parsing issue: ${(error as Error).message}`;
     return {
-      operations: [{ action: "unknown", payload: { error: errorMessage } }], // Error at the top level
-      originalCommand: command,
+      operations: [{ action: "unknown", payload: { error: errorMessage } }], 
+      originalInput: inputParts,
       overallError: errorMessage
     };
   }
