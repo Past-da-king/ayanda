@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
 import { FooterChat } from '@/components/layout/FooterChat';
-import { AiAssistantWidget } from '@/components/dashboard/AiAssistantWidget';
+import { AiAssistantWidget, ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget'; // Import ExecutedOperationInfo
 import { TasksWidget } from '@/components/dashboard/TasksWidget';
 import { CalendarWidget } from '@/components/dashboard/CalendarWidget';
 import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
@@ -20,10 +20,18 @@ import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenVie
 import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
-import type { Part } from '@google/generative-ai'; // Import Part type
+import type { Part, Content } from '@google/generative-ai';
+import type { InteractionMode } from '@/lib/gemini';
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
+
+interface AiChatMessage {
+  sender: 'user' | 'ai';
+  message: string;
+  timestamp?: Date;
+  executedOps?: ExecutedOperationInfo[]; // Added to store executed operations for AI messages
+}
 
 export default function HomePage() {
   const { data: session, status } = useSession();
@@ -40,10 +48,14 @@ export default function HomePage() {
   
   const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
 
-  const [isLoading, setIsLoading] = useState(true); // General loading for data fetches
-  const [isProcessingAi, setIsProcessingAi] = useState(false); // Specific for AI command processing
+  const [isLoading, setIsLoading] = useState(true); 
+  const [isProcessingAi, setIsProcessingAi] = useState(false);
   const [initialLoadDone, setInitialLoadDone] = useState(false);
-  const [aiMessage, setAiMessage] = useState<string | null>(null);
+  const [aiMessageForCollapsedWidget, setAiMessageForCollapsedWidget] = useState<string | null>(null);
+
+  const [isAiChatModeActive, setIsAiChatModeActive] = useState(false);
+  const [aiChatHistory, setAiChatHistory] = useState<AiChatMessage[]>([]);
+  const [currentFooterChatMessage, setCurrentFooterChatMessage] = useState('');
 
   useEffect(() => {
     const view = searchParams.get('view') as ViewMode | null;
@@ -92,11 +104,11 @@ export default function HomePage() {
         setNotes(notesData);
         setEvents(eventsData);
       } else {
-         setAiMessage("Error fetching some data. Dashboard might be incomplete.");
+         setAiMessageForCollapsedWidget("Error fetching some data. Dashboard might be incomplete.");
       }
     } catch (error) {
       console.error('Error fetching data:', error);
-      setAiMessage("Network error fetching data.");
+      setAiMessageForCollapsedWidget("Network error fetching data.");
     } finally {
       setIsLoading(false);
     }
@@ -108,85 +120,194 @@ export default function HomePage() {
     }
   }, [fetchData, initialLoadDone, status]); 
 
-  // --- CRUD Handlers (unchanged from previous versions) ---
+  const handleToggleAiChatMode = useCallback(async () => {
+    if (isAiChatModeActive && aiChatHistory.length > 0) {
+      setIsProcessingAi(true);
+      setAiMessageForCollapsedWidget("Finalizing chat with AIDA...");
+      try {
+        const formattedHistoryForSummary: Content[] = aiChatHistory.map(chat => ({
+            role: chat.sender === 'user' ? 'user' : 'model',
+            parts: [{ text: chat.message }]
+        }));
+
+        await fetch('/api/ai', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            chatHistory: formattedHistoryForSummary, 
+            isEndingChatSession: true,
+            currentCategory: currentCategory,
+            interactionMode: 'chatSession' 
+          }),
+        });
+        setAiMessageForCollapsedWidget("Chat session concluded.");
+      } catch (error) {
+        console.error("Error finalizing chat session for summary:", error);
+        setAiMessageForCollapsedWidget("Error ending chat session.");
+      } finally {
+        setIsProcessingAi(false);
+      }
+      setAiChatHistory([]);
+    }
+    setIsAiChatModeActive(prev => !prev);
+    if (!isAiChatModeActive) { 
+        setAiMessageForCollapsedWidget(null);
+        setCurrentFooterChatMessage(''); 
+    } else {
+        setCurrentFooterChatMessage(''); 
+    }
+  }, [isAiChatModeActive, aiChatHistory, currentCategory]);
+
+  const sendAiRequest = useCallback(async (
+    messageParts: Part[], 
+    currentChatSessionHistory: AiChatMessage[],
+    mode: InteractionMode
+  ) => {
+    if (status !== "authenticated") return;
+    setIsProcessingAi(true);
+    
+    const formattedHistoryForApi: Content[] = currentChatSessionHistory.map(chat => ({
+        role: chat.sender === 'user' ? 'user' : 'model',
+        parts: [{ text: chat.message }]
+    }));
+
+    try {
+        const res = await fetch('/api/ai', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                parts: messageParts, 
+                currentCategory,
+                chatHistory: mode === 'chatSession' ? formattedHistoryForApi : undefined,
+                interactionMode: mode,
+            }),
+        });
+        
+        // Assuming API response structure: { aiMessage: string, executedOperationsLog?: ExecutedOperationInfo[], error?: string }
+        const result: { aiMessage: string; executedOperationsLog?: ExecutedOperationInfo[]; error?: string } = await res.json();
+        
+        if (res.ok && result.aiMessage) {
+            const aiReplyMessage: AiChatMessage = {
+                sender: 'ai',
+                message: result.aiMessage,
+                timestamp: new Date(),
+                executedOps: result.executedOperationsLog // Store executed ops with the AI's message
+            };
+
+            if (mode === 'chatSession') {
+                setAiChatHistory(prev => [...prev, aiReplyMessage]);
+                if (result.executedOperationsLog && result.executedOperationsLog.some(op => op.success)) {
+                    fetchData(currentCategory); // Refresh data if operations were successful
+                }
+            } else { 
+                setAiMessageForCollapsedWidget(result.aiMessage);
+                if (result.executedOperationsLog && result.executedOperationsLog.some(op => op.success)) {
+                    fetchData(currentCategory);
+                }
+            }
+        } else {
+            const errorMessage = result.aiMessage || result.error || "AIDA had trouble responding.";
+            if(mode === 'chatSession') {
+                setAiChatHistory(prev => [...prev, { sender: 'ai', message: `Error: ${errorMessage}`, timestamp: new Date() }]);
+            } else {
+                setAiMessageForCollapsedWidget(`Error: ${errorMessage}`);
+            }
+        }
+    } catch (error) {
+        console.error("Error sending command to AI:", error);
+        const connectError = "Sorry, I couldn't connect. Please try again.";
+         if(mode === 'chatSession') {
+            setAiChatHistory(prev => [...prev, { sender: 'ai', message: connectError, timestamp: new Date() }]);
+        } else {
+            setAiMessageForCollapsedWidget(connectError);
+        }
+    } finally {
+        setIsProcessingAi(false);
+    }
+  }, [status, currentCategory, fetchData]);
+
+
+  const handleCommandFromFooter = (command: string) => {
+    if (!command.trim()) return;
+    const commandParts: Part[] = [{ text: command.trim() }];
+    
+    if (isAiChatModeActive) {
+        const newUserMessage: AiChatMessage = { sender: 'user', message: command.trim(), timestamp: new Date() };
+        setAiChatHistory(prev => [...prev, newUserMessage]);
+        sendAiRequest(commandParts, [...aiChatHistory, newUserMessage], 'chatSession');
+    } else {
+        setAiMessageForCollapsedWidget(null);
+        sendAiRequest(commandParts, [], 'quickCommand');
+    }
+  };
+
+  const handleAudioCommandFromFooter = (audioBase64: string, mimeType: string) => {
+     if (isAiChatModeActive) {
+        setAiChatHistory(prev => [...prev, { sender: 'ai', message: "AIDA: Audio input is not processed while chat is active. Please use text or close the chat.", timestamp: new Date() }]);
+        return;
+    }
+    const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
+    const instructionPart: Part = { text: "This is an audio command. Please process it." };
+    setAiMessageForCollapsedWidget(null);
+    sendAiRequest([audioPart, instructionPart], [], 'quickCommand');
+  };
+
+
+  const handleCrudFeedback = (message: string, mode: 'success' | 'error') => {
+    const feedbackMessage = `${mode === 'error' ? 'Error: ' : ''}${message}`;
+    if (isAiChatModeActive) {
+        setAiChatHistory(prev => [...prev, { sender: 'ai', message: feedbackMessage, timestamp: new Date() }]);
+    } else {
+        setAiMessageForCollapsedWidget(feedbackMessage);
+    }
+  };
+
   const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed' | 'userId' | 'createdAt'>) => {
     if (status !== "authenticated") return;
-    const res = await fetch('/api/tasks', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(taskData),
-    });
-    if (res.ok) {
-        fetchData(currentCategory);
-        setAiMessage(`Task "${taskData.text.substring(0,30)}..." added.`);
-    } else { setAiMessage(`Failed to add task.`); }
+    const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskData) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Task "${taskData.text.substring(0,30)}..." added.`, 'success');
+    } else { handleCrudFeedback(`Failed to add task.`, 'error'); }
   };
 
   const handleToggleTask = async (taskId: string, subTaskId?: string) => {
     if (status !== "authenticated") return;
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
-
     let updatePayload: Partial<Task>;
-
     if (subTaskId) {
-        const updatedSubTasks = (task.subTasks || []).map(st => 
-            st.id === subTaskId ? { ...st, completed: !st.completed } : st
-        );
+        const updatedSubTasks = (task.subTasks || []).map(st => st.id === subTaskId ? { ...st, completed: !st.completed } : st );
         updatePayload = { subTasks: updatedSubTasks };
         const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
-        if (updatedSubTasks.length > 0 && allSubTasksCompleted !== task.completed) {
-            updatePayload.completed = allSubTasksCompleted;
-        }
+        if (updatedSubTasks.length > 0 && allSubTasksCompleted !== task.completed) updatePayload.completed = allSubTasksCompleted;
     } else {
         updatePayload = { completed: !task.completed };
-        if (updatePayload.completed && task.subTasks && task.subTasks.length > 0) {
-            updatePayload.subTasks = task.subTasks.map(st => ({ ...st, completed: true }));
-        }
+        if (updatePayload.completed && task.subTasks && task.subTasks.length > 0) updatePayload.subTasks = task.subTasks.map(st => ({ ...st, completed: true }));
     }
-    
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updatePayload),
-    });
+    const res = await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) });
     if (res.ok) fetchData(currentCategory);
-    else setAiMessage("Failed to toggle task.");
+    else handleCrudFeedback("Failed to toggle task.", 'error');
   };
 
   const handleDeleteTask = async (taskId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Task deleted.`); } 
-    else { setAiMessage(`Failed to delete task.`); }
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Task deleted.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to delete task.`, 'error'); }
   };
   
   const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id' | 'userId'>>) => {
     if (status !== "authenticated") return;
-    if (taskUpdateData.subTasks) {
-        taskUpdateData.subTasks = taskUpdateData.subTasks.map(st => ({
-            ...st,
-            id: st.id || uuidv4() 
-        }));
-    }
-    const res = await fetch(`/api/tasks/${taskId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(taskUpdateData),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Task updated.`); } 
-    else { setAiMessage(`Failed to update task.`); }
+    if (taskUpdateData.subTasks) taskUpdateData.subTasks = taskUpdateData.subTasks.map(st => ({ ...st, id: st.id || uuidv4() }));
+    const res = await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskUpdateData) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Task updated.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to update task.`, 'error'); }
   };
 
   const handleAddGoal = async (name: string, targetValue: number, unit: string, category: Category) => {
     if (status !== "authenticated") return;
-    const res = await fetch('/api/goals', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name, currentValue: 0, targetValue, unit, category }),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Goal "${name.substring(0,30)}..." added.`); } 
-    else { setAiMessage(`Failed to add goal.`); }
+    const res = await fetch('/api/goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, currentValue: 0, targetValue, unit, category }) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal "${name.substring(0,30)}..." added.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to add goal.`, 'error'); }
   };
 
   const handleUpdateGoal = async (goalId: string, currentValue?: number, name?: string, targetValue?: number, unit?: string, categoryProp?: Category) => {
@@ -196,132 +317,147 @@ export default function HomePage() {
     const payload: any = { name: name ?? goal.name, unit: unit ?? goal.unit, category: categoryProp ?? goal.category };
     if(targetValue !== undefined) payload.targetValue = targetValue; else payload.targetValue = goal.targetValue;
     if(currentValue !== undefined) payload.currentValue = Math.max(0, Math.min(currentValue, payload.targetValue)); else payload.currentValue = goal.currentValue;
-
-    const res = await fetch(`/api/goals/${goalId}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Goal updated.`); } 
-    else { setAiMessage(`Failed to update goal.`); }
+    const res = await fetch(`/api/goals/${goalId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal updated.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to update goal.`, 'error'); }
   };
 
   const handleDeleteGoal = async (goalId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/goals/${goalId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Goal deleted.`); } 
-    else { setAiMessage(`Failed to delete goal.`); }
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal deleted.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to delete goal.`, 'error'); }
   };
   
   const handleAddNote = async (title: string | undefined, content: string, category: Category) => {
     if (status !== "authenticated") return;
-    const res = await fetch('/api/notes', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category }),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Note "${(title || content).substring(0,20)}..." added.`); } 
-    else { setAiMessage(`Failed to add note.`); }
+    const res = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category }) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Note "${(title || content).substring(0,20)}..." added.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to add note.`, 'error'); }
   };
 
   const handleUpdateNote = async (noteId: string, title: string | undefined, content: string, categoryProp?: Category) => {
      if (status !== "authenticated") return;
      const note = notes.find(n => n.id === noteId);
      if (!note) return;
-    const res = await fetch(`/api/notes/${noteId}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category: categoryProp || note.category }),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Note updated.`); } 
-    else { setAiMessage(`Failed to update note.`); }
+    const res = await fetch(`/api/notes/${noteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category: categoryProp || note.category }) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Note updated.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to update note.`, 'error'); }
   };
 
   const handleDeleteNote = async (noteId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Note deleted.`); } 
-    else { setAiMessage(`Failed to delete note.`); }
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Note deleted.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to delete note.`, 'error'); }
   };
 
   const handleAddEvent = async (eventData: Omit<AppEvent, 'id' | 'userId' | 'createdAt'>) => {
     if (status !== "authenticated") return;
-    const res = await fetch('/api/events', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventData),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Event "${eventData.title.substring(0,30)}..." added.`); } 
-    else { setAiMessage(`Failed to add event.`); }
+    const res = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventData) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Event "${eventData.title.substring(0,30)}..." added.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to add event.`, 'error'); }
   };
   
   const handleUpdateEvent = async (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id' | 'userId'>>) => {
     if (status !== "authenticated") return;
-    const res = await fetch(`/api/events/${eventId}`, {
-      method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventUpdateData),
-    });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Event updated.`); } 
-    else { setAiMessage(`Failed to update event.`); }
+    const res = await fetch(`/api/events/${eventId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventUpdateData) });
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Event updated.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to update event.`, 'error'); }
   };
 
   const handleDeleteEvent = async (eventId: string) => {
     if (status !== "authenticated") return;
     const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); setAiMessage(`Event deleted.`); } 
-    else { setAiMessage(`Failed to delete event.`); }
+    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Event deleted.`, 'success'); } 
+    else { handleCrudFeedback(`Failed to delete event.`, 'error'); }
   };
-  // --- END CRUD Handlers ---
-
-
-  const processAiCommandWithParts = async (inputParts: Part[]) => {
-    if (status !== "authenticated") return;
-    setIsProcessingAi(true);
-    setAiMessage(`AIDA is processing your input...`); 
-
-    const res = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ parts: inputParts, currentCategory }), // Send parts directly
-    });
-    
-    if (res.ok) {
-        const result = await res.json();
-        setAiMessage(result.message || "AI command processed.");
-        fetchData(currentCategory); 
-    } else {
-        const errorResult = await res.json().catch(() => ({message: "AI command failed with an unknown error."}));
-        setAiMessage(errorResult.message || "AI command failed.");
-    }
-    setIsProcessingAi(false);
-  };
-
-  const handleTextCommand = (command: string) => {
-    const textPart: Part = { text: command };
-    processAiCommandWithParts([textPart]);
-  };
-
-  const handleAudioCommand = (audioBase64: string, mimeType: string) => {
-    const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
-    const instructionPart: Part = { text: "This is an audio command. Please process it and respond with JSON operations as AYANDA assistant." };
-    processAiCommandWithParts([audioPart, instructionPart]);
-  };
-
 
   const onCategoryChange = (category: Category) => {
     setCurrentCategory(category);
-    setAiMessage(null); 
+    if (isAiChatModeActive) {
+       setAiChatHistory([]);
+       setAiChatHistory(prev => [...prev, {sender: 'ai', message: `Context switched to ${category}. How can I help you with this project?`}]);
+    }
+    setAiMessageForCollapsedWidget(null); 
   };
 
   const navigateToItemHandler = (type: 'tasks' | 'calendar' | 'notes' | 'goals', id: string) => {
+    if (isAiChatModeActive) handleToggleAiChatMode(); 
     setViewMode(type); 
     router.push(`/?view=${type}&id=${id}`, { scroll: false });
   };
 
-  const renderView = () => {
-    const commonViewProps = {
-        categories: baseAvailableCategories,
-        currentCategory: (currentCategory === "All Projects" || !baseAvailableCategories.includes(currentCategory)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : currentCategory,
-        onClose: () => { setViewMode('dashboard'); setAiMessage(null); router.push('/', { scroll: false }); },
-    };
-    
+  const renderDashboardView = () => {
+    if (isLoading && !initialLoadDone) {
+        return <div className="flex justify-center items-center h-full"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
+    }
+    if (status === "unauthenticated") { 
+        return <div className="flex justify-center items-center h-full"><p className="text-xl accent-text">Redirecting to login...</p></div>;
+    }
     const dashboardDataProps = {
       tasks: tasks.filter(t => currentCategory === "All Projects" || t.category === currentCategory),
       goals: goals.filter(g => currentCategory === "All Projects" || g.category === currentCategory),
       notes: notes.filter(n => currentCategory === "All Projects" || n.category === currentCategory).sort((a,b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime()),
       events: events.filter(e => currentCategory === "All Projects" || e.category === currentCategory),
     };
+    return (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 h-full">
+          <div className="lg:row-span-2 flex flex-col gap-5 md:gap-6">
+            <AiAssistantWidget 
+                initialMessage={aiMessageForCollapsedWidget}
+                isChatModeActive={false} 
+                onToggleChatMode={handleToggleAiChatMode}
+                chatHistory={[]} 
+                isProcessingAi={isProcessingAi}
+            />
+            <TasksWidget 
+                tasks={dashboardDataProps.tasks} 
+                onTaskToggle={handleToggleTask} 
+                onNavigate={() => { setViewMode('tasks'); router.push('/?view=tasks', { scroll: false }); }}
+                className="flex-grow"
+            />
+          </div>
+          <div className="flex flex-col space-y-5 md:space-y-6">
+            <CalendarWidget events={dashboardDataProps.events} onNavigate={() => { setViewMode('calendar'); router.push('/?view=calendar', { scroll: false }); }} />
+            <DueSoonWidget 
+                tasks={tasks} 
+                events={events} 
+                currentProjectId={currentCategory === "All Projects" ? null : currentCategory} 
+                onNavigateToItem={navigateToItemHandler}
+            />
+          </div>
+          <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => { setViewMode('goals'); router.push('/?view=goals', { scroll: false }); }} />
+          <QuickNotesWidget notes={dashboardDataProps.notes} onNavigate={() => { setViewMode('notes'); router.push('/?view=notes', { scroll: false }); }} />
+        </div>
+    );
+  }
+
+  const renderView = () => {
+    const commonViewProps = {
+        categories: baseAvailableCategories,
+        currentCategory: (currentCategory === "All Projects" || !baseAvailableCategories.includes(currentCategory)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : currentCategory,
+        onClose: () => { 
+            setViewMode('dashboard'); 
+            setAiMessageForCollapsedWidget(null); 
+            router.push('/', { scroll: false }); 
+        },
+    };
+    
+    if (isAiChatModeActive) {
+        return (
+            // This container will be centered by the main layout styling for full-screen chat
+            <div className="h-full w-full max-w-4xl mx-auto"> {/* Added max-width and mx-auto for centering */}
+                <AiAssistantWidget
+                    initialMessage={null}
+                    isChatModeActive={true}
+                    onToggleChatMode={handleToggleAiChatMode}
+                    chatHistory={aiChatHistory}
+                    isProcessingAi={isProcessingAi}
+                />
+            </div>
+        );
+    }
     
     switch (viewMode) {
       case 'tasks':
@@ -334,36 +470,7 @@ export default function HomePage() {
         return <CalendarFullScreenView {...commonViewProps} events={events} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} onDeleteEvent={handleDeleteEvent} />;
       case 'dashboard':
       default:
-        if (isLoading && !initialLoadDone) {
-            return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
-        }
-        if (status === "unauthenticated") { 
-            return <div className="flex justify-center items-center h-[calc(100vh-10rem)]"><p className="text-xl accent-text">Redirecting to login...</p></div>;
-        }
-        return (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6">
-              <div className="lg:row-span-2 flex flex-col gap-5 md:gap-6">
-                <AiAssistantWidget message={aiMessage} />
-                <TasksWidget 
-                    tasks={dashboardDataProps.tasks} 
-                    onTaskToggle={handleToggleTask} 
-                    onNavigate={() => { setViewMode('tasks'); router.push('/?view=tasks', { scroll: false }); }}
-                    className="flex-grow"
-                />
-              </div>
-              <div className="flex flex-col space-y-5 md:space-y-6">
-                <CalendarWidget events={dashboardDataProps.events} onNavigate={() => { setViewMode('calendar'); router.push('/?view=calendar', { scroll: false }); }} />
-                <DueSoonWidget 
-                    tasks={tasks} 
-                    events={events} 
-                    currentProjectId={currentCategory === "All Projects" ? null : currentCategory} 
-                    onNavigateToItem={navigateToItemHandler}
-                />
-              </div>
-              <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => { setViewMode('goals'); router.push('/?view=goals', { scroll: false }); }} />
-              <QuickNotesWidget notes={dashboardDataProps.notes} onNavigate={() => { setViewMode('notes'); router.push('/?view=notes', { scroll: false }); }} />
-            </div>
-        );
+        return renderDashboardView();
     }
   };
 
@@ -389,11 +496,25 @@ export default function HomePage() {
   }
 
   const showProjectBar = status === "authenticated" && !["/login", "/register", "/landing"].includes(pathname);
+  
+  const mainPaddingTop = isAiChatModeActive 
+      ? "pt-[5rem]" 
+      : (viewMode !== 'dashboard' && viewMode !== undefined) 
+          ? "pt-[5rem]" 
+          : showProjectBar 
+              ? "pt-[calc(5rem+2.875rem+1.5rem)]" 
+              : "pt-[calc(5rem+1.5rem)]";
+
+  const mainHeightStyle = isAiChatModeActive
+      ? { height: "calc(100vh - 5rem - 70px)" } 
+      : showProjectBar 
+          ? { height: "calc(100vh - (5rem + 2.875rem) - 70px)" } 
+          : { height: "calc(100vh - 5rem - 70px)" }; 
 
   return (
-    <div className="flex flex-col min-h-screen">
+    <div className="flex flex-col min-h-screen h-screen max-h-screen overflow-hidden">
       <Header />
-      {showProjectBar && (
+      {showProjectBar && !isAiChatModeActive && (
          <ProjectSelectorBar 
             currentCategory={currentCategory}
             onCategoryChange={onCategoryChange}
@@ -402,20 +523,25 @@ export default function HomePage() {
       )}
       <main 
         className={cn(
-            "flex-grow px-6 pb-24",
-            viewMode !== 'dashboard' ? "pt-[5rem]" : 
-            showProjectBar ? "pt-[calc(5rem+2.875rem+1.5rem)]" : "pt-[calc(5rem+1.5rem)]"
+            "flex-grow px-6 pb-6 overflow-y-auto custom-scrollbar-fullscreen",
+            isAiChatModeActive && "flex justify-center", // Center the chat view content
+            mainPaddingTop
         )}
+        style={mainHeightStyle}
       >
         {renderView()}
       </main>
       {status === "authenticated" && (
         <FooterChat 
-            onSendCommand={handleTextCommand} 
-            onSendAudioCommand={handleAudioCommand}
+            onSendCommand={handleCommandFromFooter} 
+            onSendAudioCommand={handleAudioCommandFromFooter}
             isProcessingAi={isProcessingAi}
+            isAiChatModeActive={isAiChatModeActive}
+            currentChatInput={currentFooterChatMessage}
+            onChatInputChange={setCurrentFooterChatMessage}
         />
       )}
     </div>
   );
 }
+

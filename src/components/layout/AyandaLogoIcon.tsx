@@ -20,3 +20,4 @@ export function AyandaLogoIcon({ className }: AyandaLogoIconProps) {
     </svg>
   );
 }
+

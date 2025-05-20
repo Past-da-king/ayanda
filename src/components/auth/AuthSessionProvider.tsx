@@ -10,3 +10,4 @@ interface AuthSessionProviderProps {
 export default function AuthSessionProvider({ children }: AuthSessionProviderProps) {
   return <SessionProvider>{children}</SessionProvider>;
 }
+

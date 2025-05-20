@@ -1,23 +1,23 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
-import { LogIn, LogOut, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote } from 'lucide-react'; // Added SearchIcon, XIcon
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { LogIn, LogOut, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote, UserCircle } from 'lucide-react';
 import { AyandaLogoIcon } from './AyandaLogoIcon';
 import { cn } from '@/lib/utils';
 import { useSession, signOut } from 'next-auth/react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input'; // Added Input
+import { Input } from '@/components/ui/input';
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ThemeCustomizer } from './ThemeCustomizer';
-import { SearchResultItem } from '@/types'; // Added SearchResultItem
-import { usePathname, useRouter } from 'next/navigation'; // For navigation from search
+import { ProfileCard } from './ProfileCard'; // Import new ProfileCard
+import { SearchResultItem } from '@/types'; 
+import { usePathname, useRouter } from 'next/navigation';
 
-// Helper to get icon based on search result type
 const getIconForType = (type: SearchResultItem['type']) => {
   switch (type) {
     case 'task': return <ListChecks className="w-4 h-4 mr-2 text-muted-foreground" />;
@@ -28,6 +28,12 @@ const getIconForType = (type: SearchResultItem['type']) => {
   }
 };
 
+interface UserProfileState {
+  id?: string;
+  name?: string | null;
+  email?: string | null;
+  userContextSummary?: string;
+}
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -38,8 +44,39 @@ export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchPopoverRef = useRef<HTMLDivElement>(null);
 
+  const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
+  const [userProfileData, setUserProfileData] = useState<UserProfileState | null>(null);
+  const [isProfileLoading, setIsProfileLoading] = useState(false);
+
   const currentPathname = usePathname();
   const router = useRouter();
+
+  const fetchUserProfile = useCallback(async () => {
+    if (status === "authenticated" && session?.user?.id) {
+      setIsProfileLoading(true);
+      try {
+        const res = await fetch('/api/profile');
+        if (res.ok) {
+          const data: UserProfileState = await res.json();
+          setUserProfileData(data);
+        } else {
+          setUserProfileData(null); // Reset or handle error
+          console.error("Failed to fetch profile data");
+        }
+      } catch (error) {
+        console.error("Error fetching profile data:", error);
+        setUserProfileData(null);
+      } finally {
+        setIsProfileLoading(false);
+      }
+    }
+  }, [status, session]);
+
+  useEffect(() => {
+    if (isProfilePopoverOpen) {
+      fetchUserProfile();
+    }
+  }, [isProfilePopoverOpen, fetchUserProfile]);
 
 
   const handleSearch = async (query: string) => {
@@ -49,7 +86,7 @@ export function Header() {
       return;
     }
     setIsSearchLoading(true);
-    setIsSearchPopoverOpen(true); // Open popover when search starts
+    setIsSearchPopoverOpen(true);
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}`);
       if (res.ok) {
@@ -66,7 +103,6 @@ export function Header() {
     }
   };
 
-  // Debounce search
   useEffect(() => {
     const timerId = setTimeout(() => {
       if (searchQuery.trim()) {
@@ -75,11 +111,10 @@ export function Header() {
         setSearchResults([]);
         setIsSearchPopoverOpen(false);
       }
-    }, 300); // 300ms debounce
+    }, 300);
     return () => clearTimeout(timerId);
   }, [searchQuery]);
 
-  // Close search popover on click outside
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
       if (
@@ -94,14 +129,8 @@ export function Header() {
   }, []);
 
   const handleNavigateToItem = (item: SearchResultItem) => {
-    // This is a simplified navigation. Ideally, you'd trigger the main page to open the correct view and scroll/highlight the item.
-    // For now, it might just navigate to a general area if specific deep linking isn't set up in page.tsx for search results.
-    // For MVP, redirecting to the view and user finds it by title might be okay.
-    // A more advanced solution involves context or event emitters to tell page.tsx to switch view and highlight.
-    
-    // For now, we'll assume the path takes us close enough or page.tsx handles it.
     if (item.path) {
-       router.push(`/#view=${item.type}&id=${item.id}`); // Example, adapt to how page.tsx handles deep links
+       router.push(`/#view=${item.type}&id=${item.id}`); 
     }
     setSearchQuery('');
     setSearchResults([]);
@@ -110,14 +139,13 @@ export function Header() {
 
   const showSearch = status === "authenticated" && !["/login", "/register", "/landing"].includes(currentPathname);
 
-
   return (
     <header 
       className={cn(
         "fixed top-0 left-0 right-0 z-[95]",
         "flex items-center justify-between",
         "px-6 py-4",
-        "bg-background border-b border-border-main", // Theming
+        "bg-background border-b border-border-main",
       )}
       style={{ height: '5rem' }}
     >
@@ -186,7 +214,7 @@ export function Header() {
         ) : session?.user ? (
           <>
             <span className="text-sm text-muted-foreground hidden sm:inline">
-              Welcome, {session.user.name || session.user.email?.split('@')[0]}
+              {userProfileData?.name || session.user.name || session.user.email?.split('@')[0]}
             </span>
             <Popover>
               <PopoverTrigger asChild>
@@ -198,15 +226,28 @@ export function Header() {
                 <ThemeCustomizer />
               </PopoverContent>
             </Popover>
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => signOut({ callbackUrl: '/landing' })}
-              className="text-muted-foreground hover:text-accent-foreground"
-              title="Sign Out"
-            >
-              <LogOut className="w-5 h-5" />
-            </Button>
+            
+            {/* Profile Popover */}
+            <Popover open={isProfilePopoverOpen} onOpenChange={setIsProfilePopoverOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="text-muted-foreground hover:text-accent-foreground rounded-full"
+                  title="My Profile"
+                >
+                  <UserCircle className="w-6 h-6" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="end">
+                <ProfileCard 
+                  user={userProfileData} 
+                  isLoading={isProfileLoading}
+                  onSignOut={() => signOut({ callbackUrl: '/landing' })}
+                  onRefreshContext={fetchUserProfile} // Pass the fetch function for manual refresh
+                />
+              </PopoverContent>
+            </Popover>
           </>
         ) : (
           <>
@@ -231,3 +272,4 @@ export function Header() {
     </header>
   );
 }
+

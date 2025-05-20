@@ -22,3 +22,4 @@ const GoalModel: Model<IGoal> = mongoose.models.Goal || mongoose.model<IGoal>('G
 
 export default GoalModel;
 
+

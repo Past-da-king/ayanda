@@ -2,8 +2,9 @@ import {
   GoogleGenerativeAI,
   HarmCategory,
   HarmBlockThreshold,
-  Part, // Import Part type
+  Part,
   GenerateContentRequest,
+  Content, 
 } from "@google/generative-ai"; 
 
 import { Category, Task, Goal, Note, Event as AppEvent, RecurrenceRule, SubTask } from '@/types';
@@ -18,11 +19,11 @@ if (!API_KEY) {
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 const generationConfig = {
-  temperature: 0.7,
+  temperature: 0.6, // Slightly more deterministic for structured output
   topP: 0.95,
   topK: 60,
-  maxOutputTokens: 2048, // Increased slightly for potentially complex JSON from audio
-  responseMimeType: "application/json",
+  maxOutputTokens: 2048,
+  responseMimeType: "application/json", // AI must always respond with JSON
 };
 
 const safetySettings = [
@@ -36,8 +37,10 @@ const safetySettings = [
 function getTodaysDate() { return format(new Date(), 'yyyy-MM-dd'); }
 function getTomorrowsDate() { return format(addDays(new Date(), 1), 'yyyy-MM-dd'); }
 
+export type InteractionMode = 'quickCommand' | 'chatSession';
+
 export interface AiOperation {
-  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "updateTask" | "unknown" | "clarification" | "suggestion";
+  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "updateTask" | "unknown" | "clarification" | "suggestion"; // Clarification/suggestion are now more about the nature of the *operation* if any, not the top-level reply type.
   payload: Partial<Task & Note & Goal & AppEvent & {
     taskIdToUpdate?: string; 
     text?: string; name?: string; title?: string; content?: string; 
@@ -45,7 +48,7 @@ export interface AiOperation {
     date?: string; description?: string; 
     dueDate?: string; 
     category?: Category;
-    message?: string; 
+    message?: string; // For clarification/suggestion payloads, or error messages in 'unknown'
     recurrenceRule?: RecurrenceRule;
     subTasks?: { text: string }[]; 
     subTasksToAdd?: { text: string }[]; 
@@ -55,106 +58,149 @@ export interface AiOperation {
   error?: string; 
 }
 
-export interface GeminiProcessedResponse {
-  operations: AiOperation[];
-  originalInput: Part[]; // Changed from originalCommand to originalInput
+// This interface defines the expected JSON structure from Gemini
+export interface GeminiApiResponse {
+  reply: string; // Always present: the natural language response for the user
+  operations: AiOperation[]; // Can be an empty array if no DB actions are intended
+}
+
+
+export interface ProcessedGeminiOutput {
+  reply: string; // The user-facing text reply
+  operations: AiOperation[]; // Parsed and validated operations
+  originalInputParts: Part[];
   overallError?: string;
 }
 
-// Modified to accept Part[] for multimodal input
 export async function processWithGemini(
-    inputParts: Part[], // Now accepts an array of Parts (text, audio, etc.)
+    inputParts: Part[],
     currentCategory: Category,
-    availableCategories: Category[]
-): Promise<GeminiProcessedResponse> {
-  console.log("Input Parts to Gemini:", JSON.stringify(inputParts, null, 2));
-
+    availableCategories: Category[],
+    interactionMode: InteractionMode, // New parameter
+    persistentUserContextSummary?: string,
+    inSessionChatHistory?: Array<Content>
+): Promise<ProcessedGeminiOutput> {
+  
   const today = getTodaysDate();
   const tomorrow = getTomorrowsDate();
 
-  const systemInstructionText = `You MUST ONLY return a JSON object with a top-level field named "operations". This field MUST be an ARRAY of objects. Each object in the array represents a distinct action to be taken.
+  let systemInstructionText = `You are AYANDA, an AI assistant. Your primary goal is to process user input and respond with a JSON object.
+This JSON object MUST always have two top-level fields:
+1.  "reply": A string containing your natural language conversational response to the user. This is ALWAYS required.
+2.  "operations": An array of operation objects. This array can be empty if no specific database actions are being taken.
 
-You are AYANDA, an AI assistant. Your primary goal is to accurately convert the user's input (which could be text, audio, or a combination) into this structured JSON object format.
 Today's date is ${today}. Tomorrow's date is ${tomorrow}.
-
-Each operation object MUST have "action" and "payload" fields.
-"action" can be: "addTask", "addNote", "addGoal", "addEvent", "updateTask", "clarification", "suggestion", or "unknown".
-"payload" contains details for that action. Your interpretation MUST be based on the user's input.
-
-If the input includes audio, understand the speech from the audio to determine the user's intent.
-DO NOT return any other JSON structure or conversational text outside of the "operations" array JSON.
-DO NOT attempt to interpret the user's command as an external action or tool call.
-If input does not fit defined actions, you MUST use "unknown" action with a message/error in payload. This is the ONLY acceptable output for unclear commands.
-
 Available categories for items are: ${availableCategories.join(", ")}.
-If the user specifies a category (in text or speech), use it. If not, and the command implies a category, try to infer it.
-If no category is specified or can be reasonably inferred for an item, use the current category: "${currentCategory}". If currentCategory is "All Projects", try to pick a more specific one from the available list for that item, or use the first available specific category if unsure (e.g., "Personal Life").
+If no category is specified or can be reasonably inferred for an item to be created/updated, use the current category: "${currentCategory}". If currentCategory is "All Projects", pick a specific one like "Personal Life" or the first available if more appropriate.
 
-Field details for "payload" (same as before, ensure all types are handled, especially dates).
-Example "addEvent" with date and time: { "title": "Meeting with Team", "date": "YYYY-MM-DDTHH:mm:00.000Z" ... }
-If only date given, default time to 12:00 PM. If only time, assume today's date.
-
-If the input is audio and it's unclear, or not a command, use "clarification" or "unknown" action.
-For example, if audio is just "hello", respond with { "operations": [ { "action": "clarification", "payload": { "message": "Hello! How can I help you today?" } } ] }.
-If audio is background noise, use { "operations": [ { "action": "unknown", "payload": { "message": "I couldn't understand the audio. Please try again." } } ] }.
+Each object in the "operations" array (if any) MUST have "action" and "payload" fields.
+Valid "action" values are: "addTask", "addNote", "addGoal", "addEvent", "updateTask", "unknown".
+(The "clarification" and "suggestion" actions are less common for the 'operations' array now, as the main 'reply' field handles conversational aspects. Use 'unknown' if an operation cannot be formed).
 `;
 
-  try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  if (interactionMode === 'chatSession') {
+    systemInstructionText += `
+**Chat Session Mode Active:**
+- Engage in a natural, multi-turn conversation. Use the provided chat history for context.
+- Your "reply" should be a direct response to the user's last message in the chat.
+- Generate "operations" ONLY if the user EXPLICITLY commands you to create, update, or perform a similar action in their LATEST message.
+- If the user is just chatting, asking questions, or brainstorming, your "reply" should be conversational, and the "operations" array should be empty.
+- If critical information for a requested action is missing even after checking context, your "reply" should ask for the specific missing piece, and the "operations" array should be empty.
+`;
+  } else { // quickCommand mode
+    systemInstructionText += `
+**Quick Command Mode Active:**
+- Assume the user's input is a direct command. Prioritize generating relevant "operations".
+- Your "reply" should confirm the action or state any issues (e.g., "Okay, adding task...", or "I need more details to add that goal.").
+- If the command is ambiguous or missing critical information for an action, your "reply" should ask for clarification, and the "operations" array should be empty.
+`;
+  }
+  
+  systemInstructionText += `
+**Action Payload Requirements:**
+- "addTask": requires "text". Optional: "dueDate" (YYYY-MM-DD), "category", "recurrenceRule", "subTasks" (array of {text: string}).
+- "addNote": requires "content". Optional: "title", "category".
+- "addGoal": requires "name", "targetValue" (number), "unit". Optional: "currentValue" (defaults to 0), "category".
+- "addEvent": requires "title", "date" (ISO string like YYYY-MM-DDTHH:mm:00.000Z. If only date, use 12:00 PM. If only time, use today). Optional: "description", "category", "recurrenceRule".
+- "updateTask": requires "taskIdToUpdate" OR "text" (of existing task to find). Payload can include fields to update.
+- "unknown": use if an operation fails or input is unintelligible. Include an "error" or "message" in its payload.
 
-    const request: GenerateContentRequest = {
-        contents: [{ role: "user", parts: inputParts }],
-        generationConfig: generationConfig,
-        safetySettings: safetySettings,
-        systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] } 
-        // Using object structure for systemInstruction as it's more robust.
-        // Some SDK versions might allow string directly. If `parts: [{text...}]` causes issues,
-        // can try `systemInstruction: systemInstructionText` directly.
-    };
+Handle dates intelligently (e.g., "next Tuesday", "tomorrow at 5pm").
+If audio input is provided, interpret the speech. For simple greetings like "hello" (audio or text) in chat mode, just provide a conversational "reply" and empty "operations".
+If audio is background noise, the "reply" should state you couldn't understand, and "operations" should be empty or contain an "unknown" operation.
+`;
+
+  if (persistentUserContextSummary && persistentUserContextSummary.trim() !== '') {
+    systemInstructionText += `\n\nIMPORTANT PERSISTENT USER CONTEXT (Remember this for all interactions): "${persistentUserContextSummary}"`;
+  }
+  
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  
+  const contents: Content[] = [];
+  if (inSessionChatHistory && inSessionChatHistory.length > 0) {
+    const filteredHistory = inSessionChatHistory.filter(c => !(c.role === 'model' && c.parts.some(p => (p as {text:string}).text?.includes("AIDA is thinking..."))));
+    contents.push(...filteredHistory);
+  }
+  contents.push({ role: "user", parts: inputParts });
+
+  const request: GenerateContentRequest = {
+      contents: contents,
+      generationConfig: generationConfig,
+      safetySettings: safetySettings,
+      systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] }
+  };
     
+  try {
     const result = await model.generateContent(request);
     let responseText = result.response.text();
+    console.log("[Gemini Raw Response Text]:", responseText);
 
-    console.log("Raw AI Response Text:", responseText);
-
-    if (typeof responseText !== 'string') {
-        console.error(`Expected string response, but got: ${typeof responseText}`);
-        return {
-            operations: [{ action: "unknown", payload: { error: "AI response format error: Did not receive a string response.", message: String(responseText) } }],
-            originalInput: inputParts,
-            overallError: "AI response format error: Did not receive a string response."
-        };
-    }
-
+    // Robust JSON extraction
     const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
     if (jsonMatch && jsonMatch[1]) {
         responseText = jsonMatch[1];
     } else {
         responseText = responseText.trim();
+        if (!responseText.startsWith('{') || !responseText.endsWith('}')) {
+            const firstBrace = responseText.indexOf('{');
+            const lastBrace = responseText.lastIndexOf('}');
+            if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+                responseText = responseText.substring(firstBrace, lastBrace + 1);
+            } else {
+                 console.error(`[Gemini Error] Could not extract valid JSON structure from response: ${responseText.substring(0, 300)}...`);
+                 return { reply: "Sorry, I had trouble understanding that. Could you try rephrasing?", operations: [], originalInputParts: inputParts, overallError: "AI response format error: No valid JSON found."};
+            }
+        }
     }
 
-    if (!responseText.startsWith('{')) {
-       console.error(`Expected JSON response (starting with '{'), but got: ${responseText.substring(0, 200)}...`);
-       return {
-           operations: [{ action: "unknown", payload: { error: "AI response format error: Did not receive a JSON object.", message: responseText } }],
-           originalInput: inputParts,
-           overallError: "AI response format error: Did not receive a JSON object."
-       };
+    let parsedJson: GeminiApiResponse;
+    try {
+      parsedJson = JSON.parse(responseText) as GeminiApiResponse;
+    } catch (parseError) {
+      console.error("[Gemini Error] Failed to parse JSON response:", parseError, "Response Text:", responseText);
+      return { reply: `Sorry, there was an issue processing my thoughts. Details: ${(parseError as Error).message}`, operations: [], originalInputParts: inputParts, overallError: `AI response format error: Invalid JSON. ${(parseError as Error).message}`};
     }
 
-    let parsedJson = JSON.parse(responseText);
-
-    if (!parsedJson.operations || !Array.isArray(parsedJson.operations)) {
-        console.warn("Gemini did not return operations as an array. Response:", responseText);
-        parsedJson = { operations: [ { action: "unknown", payload: { error: "AI response format error: Expected 'operations' array.", message: responseText } } ] };
+    // Validate top-level structure
+    if (typeof parsedJson.reply !== 'string') {
+        console.warn("[Gemini Warning] AI response missing or invalid 'reply' field. Response:", responseText);
+        parsedJson.reply = "I'm not sure how to respond to that. Can you try again?";
     }
-
+    if (!Array.isArray(parsedJson.operations)) {
+        console.warn("[Gemini Warning] AI response missing or invalid 'operations' array. Setting to empty. Response:", responseText);
+        parsedJson.operations = [];
+    }
+    
     const processedOperations: AiOperation[] = parsedJson.operations.map((op: any) => {
         let { action, payload } = op;
-        if (!payload) payload = {};
+        if (!action || typeof action !== 'string' || !["addTask", "addNote", "addGoal", "addEvent", "updateTask", "unknown"].includes(action)) {
+            console.warn(`[Gemini Warning] Invalid action type received: ${action}. Defaulting to 'unknown'.`);
+            action = "unknown"; 
+        }
+        if (!payload || typeof payload !== 'object') payload = {};
 
-        if ((payload.category === "All Projects" || !payload.category) &&
-            action !== 'clarification' && action !== 'suggestion' && action !== 'unknown') {
+        // Category assignment logic (remains similar)
+        if ((payload.category === "All Projects" || !payload.category) && action !== 'unknown') {
             if (currentCategory !== "All Projects" && availableCategories.includes(currentCategory)) {
                 payload.category = currentCategory;
             } else {
@@ -162,7 +208,7 @@ If audio is background noise, use { "operations": [ { "action": "unknown", "payl
                 payload.category = firstSpecificCategory || (availableCategories.length > 0 && availableCategories[0] !== "All Projects" ? availableCategories[0] : "Personal Life");
             }
         }
-
+        // Date parsing logic (remains similar)
         if ((action === "addTask" || action === "updateTask") && payload.dueDate) {
             try {
                 const parsedDate = parseISO(payload.dueDate as string);
@@ -191,16 +237,65 @@ If audio is background noise, use { "operations": [ { "action": "unknown", "payl
         }
         return operation;
     });
-
-    return { operations: processedOperations, originalInput: inputParts };
+    
+    return { 
+        reply: parsedJson.reply,
+        operations: processedOperations, 
+        originalInputParts: inputParts,
+    };
 
   } catch (error) {
-    console.error("Error processing with Gemini:", error);
-    const errorMessage = `Gemini API error or JSON parsing issue: ${(error as Error).message}`;
+    console.error("[Gemini Error] Error processing with Gemini:", error);
+    const errorMessage = `Gemini API error: ${(error as Error).message}`;
     return {
-      operations: [{ action: "unknown", payload: { error: errorMessage } }], 
-      originalInput: inputParts,
+      reply: "I encountered an issue while trying to process that. Please try again.",
+      operations: [], 
+      originalInputParts: inputParts,
       overallError: errorMessage
     };
   }
+}
+
+
+export async function generateUserContextSummary(
+    chatSessionHistory: Array<Content>
+): Promise<string> {
+    if (!chatSessionHistory || chatSessionHistory.length === 0) {
+        return "";
+    }
+    // Filter out AI "thinking" messages from history before sending for summary
+    const historyForSummary = chatSessionHistory.filter(c => !(c.role === 'model' && c.parts.some(p => (p as {text:string}).text?.includes("AIDA is thinking..."))));
+    if (historyForSummary.length === 0) return "";
+
+
+    const systemInstructionText = `You are an AI assistant. Your task is to summarize the key information, decisions, user preferences, ongoing plans, or unresolved topics from the following conversation history. 
+Focus on details that would be helpful for a personal assistant to remember for future interactions with this user.
+Keep the summary concise, informative, and neutral in tone. Output ONLY the summary text, nothing else.
+For example: "User is planning a trip to Japan in December, interested in budget airlines. They often work on 'Project X' and prefer morning meetings. They are currently looking for vegetarian recipes."
+`;
+
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+
+    const request: GenerateContentRequest = {
+        contents: [...historyForSummary, { role: 'user', parts: [{ text: "Please summarize our conversation for future reference." }] }],
+        generationConfig: {
+            temperature: 0.3,
+            topP: 0.95,
+            topK: 40,
+            maxOutputTokens: 512, 
+            responseMimeType: "text/plain",
+        },
+        safetySettings: safetySettings,
+        systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] }
+    };
+
+    try {
+        const result = await model.generateContent(request);
+        const summaryText = result.response.text();
+        console.log("[Gemini User Context Summary]:", summaryText);
+        return summaryText.trim();
+    } catch (error) {
+        console.error("[Gemini Error] Failed to generate user context summary:", error);
+        return "";
+    }
 }

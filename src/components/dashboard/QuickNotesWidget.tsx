@@ -37,3 +37,4 @@ export function QuickNotesWidget({ notes, onNavigate }: QuickNotesWidgetProps) {
     </DashboardCardWrapper>
   );
 }
+

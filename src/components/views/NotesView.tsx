@@ -209,3 +209,4 @@ export function NotesView({ notes, categories, currentCategory, onAddNote, onUpd
     </div>
   );
 }
+

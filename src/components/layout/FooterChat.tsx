@@ -1,40 +1,75 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, Mic, Square } from 'lucide-react'; // Added Mic, Square
-import { Input } from "@/components/ui/input";
+import { Send, Mic, Square, Loader2 } from 'lucide-react';
+import { Textarea } from "@/components/ui/textarea"; // Changed from Input to Textarea
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
 
 interface FooterChatProps {
   onSendCommand: (command: string) => void;
-  onSendAudioCommand: (audioBase64: string, mimeType: string) => void; // New prop for audio
-  isProcessingAi: boolean; // To disable input during AI processing
+  onSendAudioCommand: (audioBase64: string, mimeType: string) => void;
+  isProcessingAi: boolean;
+  isAiChatModeActive: boolean;
+  currentChatInput: string; 
+  onChatInputChange?: (value: string) => void;
 }
 
-export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }: FooterChatProps) {
-  const [message, setMessage] = useState('');
+export function FooterChat({ 
+  onSendCommand, 
+  onSendAudioCommand, 
+  isProcessingAi, 
+  isAiChatModeActive,
+  currentChatInput,
+  onChatInputChange
+}: FooterChatProps) {
+  
+  const [localMessage, setLocalMessage] = useState(''); // For non-chat mode input
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+
+  const inputValue = isAiChatModeActive ? currentChatInput : localMessage;
+  const setInputValue = isAiChatModeActive ? (onChatInputChange || setLocalMessage) : setLocalMessage;
 
   useEffect(() => {
-    // Clean up MediaRecorder on component unmount if it's active
     return () => {
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
         mediaRecorderRef.current.stop();
       }
     };
   }, []);
+  
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto'; // Reset height
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; // Set to scroll height
+    }
+  }, [inputValue]);
 
 
   const handleTextSend = () => {
-    if (message.trim()) {
-      onSendCommand(message.trim());
-      setMessage('');
+    const messageToSend = inputValue.trim();
+    if (messageToSend) {
+      onSendCommand(messageToSend);
+      setInputValue('');
+       if (textareaRef.current) { // Reset height after send
+        textareaRef.current.style.height = 'auto';
+      }
     }
   };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault(); 
+      if(!isProcessingAi) handleTextSend();
+    }
+  };
+
 
   const startRecording = async () => {
     setRecordingError(null);
@@ -54,12 +89,10 @@ export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }
           reader.readAsDataURL(audioBlob);
           reader.onloadend = () => {
             const base64Audio = reader.result as string;
-            // remove 'data:audio/webm;base64,' part
             const pureBase64 = base64Audio.substring(base64Audio.indexOf(',') + 1);
             onSendAudioCommand(pureBase64, mediaRecorderRef.current?.mimeType || 'audio/webm');
           };
           audioChunksRef.current = [];
-          // Stop all tracks on the stream to release the microphone
           stream.getTracks().forEach(track => track.stop());
         };
 
@@ -67,11 +100,11 @@ export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }
         setIsRecording(true);
       } catch (err) {
         console.error("Error accessing microphone:", err);
-        setRecordingError("Microphone access denied or an error occurred. Please check permissions.");
+        setRecordingError("Mic access error. Check permissions.");
         setIsRecording(false);
       }
     } else {
-      setRecordingError("Audio recording is not supported by your browser.");
+      setRecordingError("Audio recording not supported.");
     }
   };
 
@@ -90,35 +123,40 @@ export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }
     }
   };
 
+  const placeholderText = isAiChatModeActive ? "Message AIDA... (Shift+Enter for new line)" : "AYANDA, what can I help you with?";
+
   return (
     <div 
       className={cn(
         "fixed bottom-6 left-1/2 -translate-x-1/2 z-[98]",
         "w-[clamp(300px,60%,700px)]", 
         "bg-[rgba(20,20,20,0.9)] backdrop-blur-md",
-        "border border-[var(--border-color-val)] rounded-full",
+        "border border-[var(--border-color-val)] rounded-full", // Keep rounded-full for overall shape
         "pl-5 pr-2 py-2",
         "shadow-[0_10px_30px_rgba(0,0,0,0.5)]",
-        "flex items-center gap-2" // Added gap for mic button
+        "flex items-end gap-2" // items-end for button alignment with growing textarea
       )}
     >
-      {recordingError && <p className="text-xs text-destructive px-2">{recordingError}</p>}
+      {recordingError && <p className="text-xs text-destructive px-2 flex-grow text-center self-center">{recordingError}</p>}
       {!isRecording && (
-        <Input
-          type="text"
-          value={message}
-          onChange={(e) => setMessage(e.target.value)}
-          placeholder="AYANDA, what can I help you with?"
+        <Textarea
+          ref={textareaRef}
+          rows={1} // Start with 1 row
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder={placeholderText}
           className={cn(
             "flex-grow bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0",
-            "text-[var(--text-color-val)] text-[0.925rem] placeholder:text-[var(--text-muted-color-val)]"
+            "text-[var(--text-color-val)] text-[0.925rem] placeholder:text-[var(--text-muted-color-val)]",
+            "resize-none overflow-y-auto py-2 px-0 leading-tight max-h-[120px]", // Max height for textarea
+            "custom-scrollbar-footerchat" // Specific scrollbar for this textarea if needed
           )}
-          onKeyPress={(e) => e.key === 'Enter' && handleTextSend()}
+          onKeyDown={handleKeyDown}
           disabled={isProcessingAi || isRecording}
         />
       )}
       {isRecording && (
-        <div className="flex-grow flex items-center justify-center h-full">
+        <div className="flex-grow flex items-center justify-center h-10"> {/* Match button height */}
           <span className="text-sm text-[var(--accent-color-val)] animate-pulse">Recording... Click mic to stop.</span>
         </div>
       )}
@@ -131,7 +169,7 @@ export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }
           "rounded-full w-10 h-10",
           "flex items-center justify-center shrink-0"
         )}
-        disabled={isProcessingAi && !isRecording} // Allow stopping recording even if AI is processing previous command
+        disabled={isProcessingAi && !isRecording} 
         aria-label={isRecording ? "Stop Recording" : "Start Recording"}
       >
         {isRecording ? <Square className="w-5 h-5" /> : <Mic className="w-5 h-5" />}
@@ -146,10 +184,10 @@ export function FooterChat({ onSendCommand, onSendAudioCommand, isProcessingAi }
             "rounded-full w-10 h-10",
             "flex items-center justify-center shrink-0"
           )}
-          disabled={!message.trim() || isProcessingAi || isRecording}
+          disabled={!inputValue.trim() || isProcessingAi || isRecording}
           aria-label="Submit AI Input"
         >
-          <Send className="w-5 h-5" />
+          {isProcessingAi ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
         </Button>
       )}
     </div>

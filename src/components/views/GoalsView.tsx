@@ -177,3 +177,4 @@ export function GoalsView({ goals, categories, currentCategory, onAddGoal, onUpd
     </div>
   );
 }
+

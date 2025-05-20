@@ -51,3 +51,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ message: 'An unexpected error occurred during registration.' }, { status: 500 });
   }
 }
+

@@ -163,3 +163,4 @@ export function DueSoonWidget({ tasks = [], events = [], currentProjectId, onNav
     </DashboardCardWrapper>
   );
 }
+

@@ -21,3 +21,4 @@ const NoteModel: Model<INote> = mongoose.models.Note || mongoose.model<INote>('N
 
 export default NoteModel;
 
+

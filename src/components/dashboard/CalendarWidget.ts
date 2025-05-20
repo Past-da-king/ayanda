@@ -104,3 +104,4 @@ export function CalendarWidget({ events, onNavigate }: CalendarWidgetProps) {
   );
 }
 
+

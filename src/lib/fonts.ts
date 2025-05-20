@@ -67,3 +67,4 @@ export const availableFonts: FontConfig[] = [
 ];
 
 export const defaultFontKey = 'inter';
+
