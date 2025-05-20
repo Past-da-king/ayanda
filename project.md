@@ -1,181 +1,256 @@
 
-## src/components/dashboard/AiAssistantWidget.tsx
+
+## src/app/api/ai/route.ts
 
 ```typescript
-"use client";
+import { NextRequest, NextResponse } from 'next/server';
+import { processWithGemini, generateUserContextSummary, ProcessedGeminiOutput, AiOperation, InteractionMode } from '@/lib/gemini';
+import { Category, Task, Note, Goal, Event as AppEvent, SubTask } from '@/types';
+import { v4 as uuidv4 } from 'uuid';
+import dbConnect from '@/lib/mongodb';
+import TaskModel from '@/models/TaskModel';
+import NoteModel from '@/models/NoteModel';
+import GoalModel from '@/models/GoalModel';
+import EventModel from '@/models/EventModel';
+import UserModel from '@/models/UserModel';
+import { getToken } from 'next-auth/jwt';
+import type { Part, Content } from '@google/generative-ai';
 
-import React, { useRef, useEffect, useState } from 'react';
-import { Star, MessageSquarePlus, XSquare, ChevronDown, ChevronUp } from 'lucide-react';
-import { DashboardCardWrapper } from './DashboardCardWrapper';
-import { cn } from '@/lib/utils';
-import { format } from 'date-fns';
-import ReactMarkdown from 'react-markdown';
+const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 
-export interface ExecutedOperationInfo {
-  type: string;
-  summary: string;
-  success: boolean;
-  error?: string;
-}
-interface AiChatMessage { 
-  sender: 'user' | 'ai';
-  message: string;
-  timestamp?: Date;
-  executedOps?: ExecutedOperationInfo[];
-}
-
-interface AiAssistantWidgetProps {
-  initialMessage: string | null;
-  isChatModeActive: boolean;
-  onToggleChatMode: () => void;
-  chatHistory: AiChatMessage[];
-  isProcessingAi: boolean; 
-}
-
-const DEFAULT_MESSAGE = "Hi there! How can I help you make the most of your day?";
-
-const ExecutedOpsDisplay: React.FC<{ ops: ExecutedOperationInfo[] }> = ({ ops }) => {
-  const [isExpanded, setIsExpanded] = useState(false);
-  if (!ops || ops.length === 0) return null;
-
-  const successfulOps = ops.filter(op => op.success);
-  // const failedOps = ops.filter(op => !op.success); // Kept for potential future use
-
-  return (
-    <div className="mt-2 pt-2 border-t border-border-main/20 text-xs">
-      <button 
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="flex items-center text-muted-foreground/80 hover:text-accent-foreground w-full text-left mb-1 focus:outline-none"
-      >
-        {isExpanded ? <ChevronUp className="w-3 h-3 mr-1 shrink-0" /> : <ChevronDown className="w-3 h-3 mr-1 shrink-0" />}
-        <span className="font-medium">
-            { ops.length === 1 && ops[0].success ? `${ops[0].type.replace(" Added", "")}: '${ops[0].summary.substring(0,20)}...' processed.` : 
-              `${ops.length} action(s) processed.`
-            }
-        </span>
-      </button>
-      {isExpanded && (
-        <ul className="list-none pl-4 space-y-0.5 text-muted-foreground/90">
-          {ops.map((op, idx) => (
-            <li key={idx} className={cn("text-[11px]",op.success ? "" : "text-destructive")}>
-              <span className="font-semibold">{op.type}:</span> {op.summary} {op.success ? <span className="text-green-400/80">(Success)</span> : <span className="text-red-400/80">(Failed: {op.error || 'Unknown error'})</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-};
-
-
-export function AiAssistantWidget({
-  initialMessage,
-  isChatModeActive,
-  onToggleChatMode,
-  chatHistory,
-  isProcessingAi, 
-}: AiAssistantWidgetProps) {
-  const displayMessage = initialMessage || DEFAULT_MESSAGE;
-  const chatMessagesEndRef = useRef<HTMLDivElement | null>(null);
-
-  useEffect(() => {
-    if (isChatModeActive) {
-      chatMessagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+async function findTaskByName(userId: string, taskName: string, category?: Category): Promise<Task | null> {
+    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } };
+    if (category && category !== "All Projects") {
+        query.category = category;
     }
-  }, [chatHistory, isChatModeActive]);
+    return TaskModel.findOne(query).lean();
+}
 
-  if (!isChatModeActive) {
-    // Collapsed Dashboard Widget View
-    return (
-      <DashboardCardWrapper
-        title="AIDA"
-        icon={<Star className="w-5 h-5 accent-text" />}
-        allowExpand={true}
-        onNavigate={onToggleChatMode}
-        id="ai-assistant-widget"
-        className="min-h-[120px] lg:min-h-[140px]"
-        contentClassName="!p-3 flex items-center"
-        customExpandIcon={<MessageSquarePlus className="w-5 h-5"/>}
-        customExpandTooltip="Open Chat Mode"
-      >
-        <div className="flex items-start gap-2.5">
-          <p className="text-sm text-[var(--text-color-val)] leading-relaxed">
-            {displayMessage}
-          </p>
-        </div>
-      </DashboardCardWrapper>
-    );
+
+export async function POST(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized for AI command' }, { status: 401 });
   }
+  const userId = token.id as string;
 
-  // Full-Screen Chat Mode UI
-  return (
-    // This is the main container for the full-screen chat.
-    // Removed: bg-widget-background, border, border-border-main, rounded-md, shadow-xl
-    // It will now inherit the page background (var(--background-color-val))
-    // and appear borderless.
-    <div className="flex flex-col h-full w-full"> 
-      {/* Header for Chat Mode - This will still have its own bottom border */}
-      <div className="flex justify-between items-center p-4 border-b border-border-main shrink-0">
-        <div className="flex items-center gap-2">
-          <Star className="w-6 h-6 accent-text" /> 
-          <h2 className="font-orbitron text-xl accent-text">AIDA Chat</h2>
-        </div>
-        <button
-          onClick={onToggleChatMode}
-          className="p-1 bg-transparent border-none text-muted-foreground hover:accent-text"
-          title="Close Chat"
-          aria-label="Close Chat"
-        >
-          <XSquare className="w-6 h-6" />
-        </button>
-      </div>
+  await dbConnect();
+  try {
+    const { 
+        parts, 
+        currentCategory, 
+        chatHistory, 
+        isEndingChatSession, 
+        interactionMode 
+    } = await request.json();
 
-      {/* Chat Messages Area - This will scroll within the available space */}
-      {/* Added pb-24 (96px) for FooterChat spacing, ensuring last message is visible */}
-      <div className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar-fullscreen pb-24"> 
-        {chatHistory.map((chat, index) => (
-          <div
-            key={index}
-            className={cn(
-              "flex flex-col max-w-[85%] w-fit",
-              chat.sender === 'user' ? "self-end items-end ml-auto" : "self-start items-start mr-auto"
-            )}
-          >
-            <div
-              className={cn(
-                "p-3 rounded-lg shadow-sm", // Bubbles still have shadow & distinct background
-                chat.sender === 'user' ? "bg-primary text-primary-foreground" 
-                                       : "bg-input-bg text-foreground" // AI bubble uses input-bg for slight distinction from page
-              )}
-            >
-              {chat.sender === 'ai' ? (
-                <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1">
-                  <ReactMarkdown>{chat.message}</ReactMarkdown>
-                </div>
-              ) : (
-                <p className="text-sm whitespace-pre-wrap">{chat.message}</p>
-              )}
-              {chat.sender === 'ai' && chat.executedOps && chat.executedOps.length > 0 && (
-                <ExecutedOpsDisplay ops={chat.executedOps} />
-              )}
-            </div>
-            {chat.timestamp && (
-                <p className="text-[10px] text-muted-foreground/70 mt-0.5 px-1">
-                    {format(chat.timestamp, 'p')}
-                </p>
-            )}
-          </div>
-        ))}
-        {isProcessingAi && chatHistory.length > 0 && chatHistory[chatHistory.length-1].sender === 'user' && (
-          <div className="self-start flex items-center gap-2 p-3 text-muted-foreground">
-            <Star className="w-5 h-5 animate-pulse text-accent-color-val" />
-            <span className="text-sm italic">AIDA is thinking...</span>
-          </div>
-        )}
-        <div ref={chatMessagesEndRef} />
-      </div>
-      {/* Input is handled by global FooterChat.tsx, which is fixed at the bottom of the viewport */}
-    </div>
-  );
+    if (!interactionMode || (interactionMode !== 'quickCommand' && interactionMode !== 'chatSession')) {
+        return NextResponse.json({ message: 'Valid interactionMode is required.' }, { status: 400 });
+    }
+
+    if (!parts && !isEndingChatSession) {
+      return NextResponse.json({ message: 'Input parts are required unless ending chat session.' }, { status: 400 });
+    }
+    if (!currentCategory && !isEndingChatSession && (!parts || (parts as Part[]).length > 0)) {
+        return NextResponse.json({ message: 'currentCategory is required for active commands.' }, { status: 400 });
+    }
+
+    const userProfile = await UserModel.findOne({ id: userId });
+    const persistentUserContextSummary = userProfile?.userContextSummary || "";
+
+    if (isEndingChatSession && chatHistory && Array.isArray(chatHistory)) {
+        const sessionTranscript = chatHistory as Content[];
+        const newSummary = (sessionTranscript.length > 0) 
+            ? await generateUserContextSummary(sessionTranscript, persistentUserContextSummary)
+            : persistentUserContextSummary; 
+
+        if (userProfile) {
+            // Only attempt to save if newSummary is defined and different from the existing one,
+            // OR if the existing one is empty and newSummary has content (even if it's an empty string from AI, we might want to persist that "reset").
+            if (newSummary !== undefined && newSummary !== persistentUserContextSummary) {
+                userProfile.userContextSummary = newSummary; 
+                
+                // Explicitly mark as modified if setting to empty string from a non-empty or non-existent state
+                if(persistentUserContextSummary && newSummary === "") {
+                    userProfile.markModified('userContextSummary');
+                }
+
+                const MAX_CONTEXT_LENGTH = 10000; 
+                if (userProfile.userContextSummary.length > MAX_CONTEXT_LENGTH) {
+                    console.warn(`[AI API] User context summary for ${userId} exceeded ${MAX_CONTEXT_LENGTH} chars and was truncated.`);
+                    userProfile.userContextSummary = userProfile.userContextSummary.slice(-MAX_CONTEXT_LENGTH);
+                }
+                
+                try {
+                    console.log(`[AI API] Attempting to save user context for user ${userId}. New summary length: ${newSummary.length}. Old summary length: ${persistentUserContextSummary.length}`);
+                    await userProfile.save(); // Removed assignment to savedProfile as it's not strictly needed for verification.
+                    
+                    // Verification fetch
+                    const updatedProfileCheck = await UserModel.findOne({ id: userId }).select('userContextSummary');
+                    
+                    if (updatedProfileCheck) {
+                        const dbSummary = updatedProfileCheck.userContextSummary || ""; // Ensure it's a string for substring
+                        console.log(`[AI API] Verification fetch - DB summary after save: "${dbSummary.substring(0, 100)}..."`);
+                        if (dbSummary === newSummary) {
+                             console.log(`[AI API] SUCCESSFULLY SAVED new summary for user ${userId}.`);
+                        } else {
+                             console.error(`[AI API] DISCREPANCY: New summary NOT fully saved for user ${userId}. DB has: "${dbSummary.substring(0,100)}..." vs Proposed: "${newSummary.substring(0,100)}..."`);
+                        }
+                    } else {
+                        console.error(`[AI API] Verification fetch FAILED for user ${userId} after save attempt.`);
+                    }
+                    return NextResponse.json({ aiMessage: "Chat session concluded. User context updated.", operations: [] }, { status: 200 });
+
+                } catch (saveError) {
+                    console.error(`[AI API] Error saving user profile for user ${userId}:`, saveError);
+                    return NextResponse.json({ aiMessage: "Chat session ended, but failed to save updated user context.", error: (saveError as Error).message, operations: [] }, { status: 500 });
+                }
+            } else {
+                 console.log(`[AI API] User context for user ${userId} unchanged (new summary is same as old, or new is undefined). No save needed.`);
+                 return NextResponse.json({ aiMessage: "Chat session ended. User context remains unchanged.", operations: [] }, { status: 200 });
+            }
+        } else {
+            console.error(`[AI API] User profile not found for ID ${userId} when trying to save context summary.`);
+            return NextResponse.json({ aiMessage: "Chat session ended, but user profile not found to save context.", operations: [] }, { status: 404 });
+        }
+    }
+    
+    if (!parts || !Array.isArray(parts) || parts.length === 0) {
+         return NextResponse.json({ message: 'Input parts are required for active commands.' }, { status: 400 });
+    }
+
+    const geminiResult: ProcessedGeminiOutput = await processWithGemini(
+        parts as Part[], 
+        currentCategory as Category, 
+        ["All Projects", ...baseAvailableCategories],
+        interactionMode as InteractionMode,
+        persistentUserContextSummary,
+        chatHistory as Content[] | undefined
+    );
+
+    if (geminiResult.overallError) {
+      return NextResponse.json({ aiMessage: geminiResult.reply || geminiResult.overallError, operations: geminiResult.operations || [], error: geminiResult.overallError, executedOperationsLog: [] }, { status: 422 });
+    }
+    
+    let executedOperationsInfo: ExecutedOperationInfo[] = [];
+    let hasExecutionErrors = false;
+    
+    if (geminiResult.operations && geminiResult.operations.length > 0) {
+        for (const operation of geminiResult.operations) {
+            let effectiveCategory = operation.payload.category || currentCategory;
+            if ((effectiveCategory === "All Projects" || !baseAvailableCategories.includes(effectiveCategory as Category)) && baseAvailableCategories.length > 0) {
+                effectiveCategory = baseAvailableCategories[0];
+            } else if (!baseAvailableCategories.includes(effectiveCategory as Category)) {
+                effectiveCategory = "Personal Life";
+            }
+            let itemSummary = "";
+
+            try {
+                switch (operation.action) {
+                case 'addTask':
+                    if (!operation.payload.text) throw new Error('Task text is missing.');
+                    itemSummary = operation.payload.text.substring(0, 30);
+                    const newTaskData: Task = {
+                    id: uuidv4(), userId: userId, text: operation.payload.text!, completed: false,
+                    dueDate: operation.payload.dueDate as string | undefined, category: effectiveCategory as Category,
+                    recurrenceRule: operation.payload.recurrenceRule,
+                    subTasks: (operation.payload.subTasks || []).map(st => ({ id: uuidv4(), text: st.text, completed: false })),
+                    createdAt: new Date().toISOString(),
+                    };
+                    const createdTask = new TaskModel(newTaskData); await createdTask.save();
+                    executedOperationsInfo.push({ type: 'Task Added', summary: itemSummary, success: true });
+                    break;
+                
+                case 'updateTask':
+                    let taskToUpdateId = operation.payload.taskIdToUpdate;
+                    let taskInstance = null;
+                    if (taskToUpdateId) { taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId }); }
+                    else if (operation.payload.text) { 
+                        taskInstance = await findTaskByName(userId, operation.payload.text, effectiveCategory as Category);
+                        if (taskInstance) taskToUpdateId = taskInstance.id; 
+                    }
+                    if (!taskInstance) throw new Error(`Task '${operation.payload.text || taskToUpdateId || 'Unknown'}' not found.`);
+                    itemSummary = taskInstance.text.substring(0, 30);
+                    let updated = false;
+                    if (operation.payload.text !== undefined && operation.payload.text !== taskInstance.text) { taskInstance.text = operation.payload.text; updated = true; }
+                    if (operation.payload.dueDate !== undefined) { taskInstance.dueDate = operation.payload.dueDate; updated = true; }
+                    if (operation.payload.category !== undefined && operation.payload.category !== taskInstance.category) { taskInstance.category = operation.payload.category as Category; updated = true; }
+                    if (operation.payload.completed !== undefined && operation.payload.completed !== taskInstance.completed) { taskInstance.completed = operation.payload.completed; updated = true; }
+                    if (operation.payload.recurrenceRule !== undefined) { taskInstance.recurrenceRule = operation.payload.recurrenceRule; updated = true; }
+                    if (operation.payload.subTasksToAdd && operation.payload.subTasksToAdd.length > 0) {
+                        const newSubTasksForExisting = operation.payload.subTasksToAdd.map(st => ({ id: uuidv4(), text: st.text, completed: false }));
+                        taskInstance.subTasks = [...(taskInstance.subTasks || []), ...newSubTasksForExisting];
+                        updated = true;
+                    }
+                     if (operation.payload.subTasks !== undefined) { 
+                        taskInstance.subTasks = operation.payload.subTasks.map(st => ({ id: st.id || uuidv4(), text: st.text, completed: st.completed || false }));
+                        updated = true;
+                    }
+
+                    if (updated) await taskInstance.save();
+                    executedOperationsInfo.push({ type: 'Task Updated', summary: itemSummary, success: true, error: updated ? undefined : "No changes applied." });
+                    break;
+
+                case 'addNote':
+                    if (!operation.payload.content) throw new Error('Note content is missing.');
+                    itemSummary = operation.payload.title || operation.payload.content.substring(0, 30);
+                    const newNoteData: Note = { id: uuidv4(), userId: userId, title: operation.payload.title as string | undefined, content: operation.payload.content!, category: effectiveCategory as Category, lastEdited: new Date().toISOString() };
+                    const createdNote = new NoteModel(newNoteData); await createdNote.save();
+                    executedOperationsInfo.push({ type: 'Note Added', summary: itemSummary, success: true });
+                    break;
+
+                case 'addGoal':
+                    if (!operation.payload.name || operation.payload.targetValue === undefined || !operation.payload.unit) throw new Error('Goal name, targetValue, or unit is missing.');
+                    itemSummary = operation.payload.name.substring(0, 30);
+                    const newGoalData: Goal = { id: uuidv4(), userId: userId, name: operation.payload.name!, currentValue: (operation.payload as Goal).currentValue || 0, targetValue: operation.payload.targetValue!, unit: operation.payload.unit!, category: effectiveCategory as Category };
+                    const createdGoal = new GoalModel(newGoalData); await createdGoal.save();
+                    executedOperationsInfo.push({ type: 'Goal Added', summary: itemSummary, success: true });
+                    break;
+                    
+                case 'addEvent':
+                    if (!operation.payload.title || !operation.payload.date) throw new Error('Event title or date is missing.');
+                    itemSummary = operation.payload.title.substring(0, 30);
+                    const newEventData: AppEvent = { id: uuidv4(), userId: userId, title: operation.payload.title!, date: operation.payload.date!, description: operation.payload.description as string | undefined, category: effectiveCategory as Category, recurrenceRule: operation.payload.recurrenceRule };
+                    const createdEvent = new EventModel(newEventData); await createdEvent.save();
+                    executedOperationsInfo.push({ type: 'Event Added', summary: itemSummary, success: true });
+                    break;
+                
+                case 'unknown':
+                    hasExecutionErrors = true;
+                    executedOperationsInfo.push({ type: 'Unknown Operation', summary: operation.payload.error || 'Could not process.', success: false, error: operation.payload.error });
+                    break;
+                }
+            } catch (opError) {
+                hasExecutionErrors = true;
+                console.error(`Error executing AI operation ${operation.action}:`, opError);
+                executedOperationsInfo.push({ type: operation.action, summary: itemSummary || 'Failed operation', success: false, error: (opError as Error).message });
+            }
+        }
+    }
+    
+    let finalUserMessage = geminiResult.reply;
+    if (executedOperationsInfo.some(op => op.success)) {
+        const successfulOpsSummary = executedOperationsInfo.filter(op => op.success).map(op => `${op.type.replace(" Added", "")} '${op.summary.substring(0,20)}...'`).join(', ');
+        if (finalUserMessage.slice(-1) !== '.' && finalUserMessage.slice(-1) !== '!' && finalUserMessage.slice(-1) !== '?') {
+             finalUserMessage += ".";
+        }
+        finalUserMessage += ` I also processed these actions: ${successfulOpsSummary}.`;
+    }
+    if (hasExecutionErrors) {
+        const failedOpsSummary = executedOperationsInfo.filter(op => !op.success).map(op => `${op.type} failed: ${op.error}`).join(', ');
+        finalUserMessage += ` However, some actions failed: ${failedOpsSummary}.`;
+    }
+    
+    return NextResponse.json({ 
+        aiMessage: finalUserMessage.trim(), 
+        operations: geminiResult.operations,
+        executedOperationsLog: executedOperationsInfo,
+        originalInputParts: geminiResult.originalInputParts
+    }, { status: hasExecutionErrors && !executedOperationsInfo.some(i=>i.success && i.type !== 'Unknown Operation') ? 422 : 200 });
+
+  } catch (error) {
+    console.error('Error in AI command processing API:', error);
+    return NextResponse.json({ aiMessage: 'Failed to process AI command.', error: (error as Error).message, operations:[], executedOperationsLog: [] }, { status: 500 });
+  }
 }
 ```

@@ -34,9 +34,9 @@ export async function POST(request: NextRequest) {
     const { 
         parts, 
         currentCategory, 
-        chatHistory, // In-session chat history
-        isEndingChatSession, // Flag to trigger summarization
-        interactionMode // 'quickCommand' or 'chatSession'
+        chatHistory, 
+        isEndingChatSession, 
+        interactionMode 
     } = await request.json();
 
     if (!interactionMode || (interactionMode !== 'quickCommand' && interactionMode !== 'chatSession')) {
@@ -46,32 +46,68 @@ export async function POST(request: NextRequest) {
     if (!parts && !isEndingChatSession) {
       return NextResponse.json({ message: 'Input parts are required unless ending chat session.' }, { status: 400 });
     }
-    if (!currentCategory && !isEndingChatSession && interactionMode !== 'chatSession') { 
-        // currentCategory might be less critical for a chat session just ending if parts is also empty
-        // but for active command/chat turns, it's usually needed.
-         if(!parts || (parts as Part[]).length === 0) {
-            // If ending session and no parts, category is not needed
-         } else {
-            return NextResponse.json({ message: 'currentCategory is required for active commands.' }, { status: 400 });
-         }
+    if (!currentCategory && !isEndingChatSession && (!parts || (parts as Part[]).length > 0)) {
+        return NextResponse.json({ message: 'currentCategory is required for active commands.' }, { status: 400 });
     }
-
 
     const userProfile = await UserModel.findOne({ id: userId });
     const persistentUserContextSummary = userProfile?.userContextSummary || "";
 
-    if (isEndingChatSession && chatHistory && Array.isArray(chatHistory) && chatHistory.length > 0) {
-        const summary = await generateUserContextSummary(chatHistory as Content[]);
-        if (summary && userProfile) {
-            userProfile.userContextSummary = (persistentUserContextSummary ? persistentUserContextSummary + "\n\n" : "") + `Chat Session Summary (${new Date().toISOString()}):\n${summary}`;
-            const MAX_CONTEXT_LENGTH = 5000; 
-            if (userProfile.userContextSummary.length > MAX_CONTEXT_LENGTH) {
-                userProfile.userContextSummary = userProfile.userContextSummary.slice(-MAX_CONTEXT_LENGTH);
+    if (isEndingChatSession && chatHistory && Array.isArray(chatHistory)) {
+        const sessionTranscript = chatHistory as Content[];
+        const newSummary = (sessionTranscript.length > 0) 
+            ? await generateUserContextSummary(sessionTranscript, persistentUserContextSummary)
+            : persistentUserContextSummary; 
+
+        if (userProfile) {
+            // Only attempt to save if newSummary is defined and different from the existing one,
+            // OR if the existing one is empty and newSummary has content (even if it's an empty string from AI, we might want to persist that "reset").
+            if (newSummary !== undefined && newSummary !== persistentUserContextSummary) {
+                userProfile.userContextSummary = newSummary; 
+                
+                // Explicitly mark as modified if setting to empty string from a non-empty or non-existent state
+                if(persistentUserContextSummary && newSummary === "") {
+                    userProfile.markModified('userContextSummary');
+                }
+
+                const MAX_CONTEXT_LENGTH = 10000; 
+                if (userProfile.userContextSummary.length > MAX_CONTEXT_LENGTH) {
+                    console.warn(`[AI API] User context summary for ${userId} exceeded ${MAX_CONTEXT_LENGTH} chars and was truncated.`);
+                    userProfile.userContextSummary = userProfile.userContextSummary.slice(-MAX_CONTEXT_LENGTH);
+                }
+                
+                try {
+                    console.log(`[AI API] Attempting to save user context for user ${userId}. New summary length: ${newSummary.length}. Old summary length: ${persistentUserContextSummary.length}`);
+                    await userProfile.save(); // Removed assignment to savedProfile as it's not strictly needed for verification.
+                    
+                    // Verification fetch
+                    const updatedProfileCheck = await UserModel.findOne({ id: userId }).select('userContextSummary');
+                    
+                    if (updatedProfileCheck) {
+                        const dbSummary = updatedProfileCheck.userContextSummary || ""; // Ensure it's a string for substring
+                        console.log(`[AI API] Verification fetch - DB summary after save: "${dbSummary.substring(0, 100)}..."`);
+                        if (dbSummary === newSummary) {
+                             console.log(`[AI API] SUCCESSFULLY SAVED new summary for user ${userId}.`);
+                        } else {
+                             console.error(`[AI API] DISCREPANCY: New summary NOT fully saved for user ${userId}. DB has: "${dbSummary.substring(0,100)}..." vs Proposed: "${newSummary.substring(0,100)}..."`);
+                        }
+                    } else {
+                        console.error(`[AI API] Verification fetch FAILED for user ${userId} after save attempt.`);
+                    }
+                    return NextResponse.json({ aiMessage: "Chat session concluded. User context updated.", operations: [] }, { status: 200 });
+
+                } catch (saveError) {
+                    console.error(`[AI API] Error saving user profile for user ${userId}:`, saveError);
+                    return NextResponse.json({ aiMessage: "Chat session ended, but failed to save updated user context.", error: (saveError as Error).message, operations: [] }, { status: 500 });
+                }
+            } else {
+                 console.log(`[AI API] User context for user ${userId} unchanged (new summary is same as old, or new is undefined). No save needed.`);
+                 return NextResponse.json({ aiMessage: "Chat session ended. User context remains unchanged.", operations: [] }, { status: 200 });
             }
-            await userProfile.save();
-            return NextResponse.json({ aiMessage: "Chat session summarized and user context updated.", operations: [] }, { status: 200 });
+        } else {
+            console.error(`[AI API] User profile not found for ID ${userId} when trying to save context summary.`);
+            return NextResponse.json({ aiMessage: "Chat session ended, but user profile not found to save context.", operations: [] }, { status: 404 });
         }
-        return NextResponse.json({ aiMessage: "Chat session ended, no summary generated or user profile not found.", operations: [] }, { status: 200 });
     }
     
     if (!parts || !Array.isArray(parts) || parts.length === 0) {
@@ -88,10 +124,10 @@ export async function POST(request: NextRequest) {
     );
 
     if (geminiResult.overallError) {
-      return NextResponse.json({ aiMessage: geminiResult.reply || geminiResult.overallError, operations: geminiResult.operations || [], error: geminiResult.overallError }, { status: 422 });
+      return NextResponse.json({ aiMessage: geminiResult.reply || geminiResult.overallError, operations: geminiResult.operations || [], error: geminiResult.overallError, executedOperationsLog: [] }, { status: 422 });
     }
     
-    let executedOperationsInfo: { type: string; summary: string; success: boolean; error?: string }[] = [];
+    let executedOperationsInfo: ExecutedOperationInfo[] = [];
     let hasExecutionErrors = false;
     
     if (geminiResult.operations && geminiResult.operations.length > 0) {
@@ -131,8 +167,21 @@ export async function POST(request: NextRequest) {
                     if (!taskInstance) throw new Error(`Task '${operation.payload.text || taskToUpdateId || 'Unknown'}' not found.`);
                     itemSummary = taskInstance.text.substring(0, 30);
                     let updated = false;
-                    if (operation.payload.text && operation.payload.text !== taskInstance.text) { taskInstance.text = operation.payload.text; updated = true; }
-                    // ... (other update fields for task)
+                    if (operation.payload.text !== undefined && operation.payload.text !== taskInstance.text) { taskInstance.text = operation.payload.text; updated = true; }
+                    if (operation.payload.dueDate !== undefined) { taskInstance.dueDate = operation.payload.dueDate; updated = true; }
+                    if (operation.payload.category !== undefined && operation.payload.category !== taskInstance.category) { taskInstance.category = operation.payload.category as Category; updated = true; }
+                    if (operation.payload.completed !== undefined && operation.payload.completed !== taskInstance.completed) { taskInstance.completed = operation.payload.completed; updated = true; }
+                    if (operation.payload.recurrenceRule !== undefined) { taskInstance.recurrenceRule = operation.payload.recurrenceRule; updated = true; }
+                    if (operation.payload.subTasksToAdd && operation.payload.subTasksToAdd.length > 0) {
+                        const newSubTasksForExisting = operation.payload.subTasksToAdd.map(st => ({ id: uuidv4(), text: st.text, completed: false }));
+                        taskInstance.subTasks = [...(taskInstance.subTasks || []), ...newSubTasksForExisting];
+                        updated = true;
+                    }
+                     if (operation.payload.subTasks !== undefined) { 
+                        taskInstance.subTasks = operation.payload.subTasks.map(st => ({ id: st.id || uuidv4(), text: st.text, completed: st.completed || false }));
+                        updated = true;
+                    }
+
                     if (updated) await taskInstance.save();
                     executedOperationsInfo.push({ type: 'Task Updated', summary: itemSummary, success: true, error: updated ? undefined : "No changes applied." });
                     break;
@@ -165,7 +214,6 @@ export async function POST(request: NextRequest) {
                     hasExecutionErrors = true;
                     executedOperationsInfo.push({ type: 'Unknown Operation', summary: operation.payload.error || 'Could not process.', success: false, error: operation.payload.error });
                     break;
-                // Clarification/Suggestion are handled by the main 'reply' from Gemini, not as DB ops.
                 }
             } catch (opError) {
                 hasExecutionErrors = true;
@@ -174,11 +222,10 @@ export async function POST(request: NextRequest) {
             }
         }
     }
-
-    // Construct final user-facing message based on Gemini's reply and executed operations
+    
     let finalUserMessage = geminiResult.reply;
     if (executedOperationsInfo.some(op => op.success)) {
-        const successfulOpsSummary = executedOperationsInfo.filter(op => op.success).map(op => `${op.type} '${op.summary}'`).join(', ');
+        const successfulOpsSummary = executedOperationsInfo.filter(op => op.success).map(op => `${op.type.replace(" Added", "")} '${op.summary.substring(0,20)}...'`).join(', ');
         if (finalUserMessage.slice(-1) !== '.' && finalUserMessage.slice(-1) !== '!' && finalUserMessage.slice(-1) !== '?') {
              finalUserMessage += ".";
         }
@@ -191,13 +238,13 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json({ 
         aiMessage: finalUserMessage.trim(), 
-        operations: geminiResult.operations, // Send back the AI's intended operations for potential UI use or logging
-        executedOperationsLog: executedOperationsInfo, // Log of what was actually attempted/done
+        operations: geminiResult.operations,
+        executedOperationsLog: executedOperationsInfo,
         originalInputParts: geminiResult.originalInputParts
-    }, { status: hasExecutionErrors && !executedOperationsInfo.some(i=>i.success) ? 422 : 200 });
+    }, { status: hasExecutionErrors && !executedOperationsInfo.some(i=>i.success && i.type !== 'Unknown Operation') ? 422 : 200 });
 
   } catch (error) {
     console.error('Error in AI command processing API:', error);
-    return NextResponse.json({ aiMessage: 'Failed to process AI command.', error: (error as Error).message, operations:[] }, { status: 500 });
+    return NextResponse.json({ aiMessage: 'Failed to process AI command.', error: (error as Error).message, operations:[], executedOperationsLog: [] }, { status: 500 });
   }
 }

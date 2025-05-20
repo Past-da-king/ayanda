@@ -19,11 +19,11 @@ if (!API_KEY) {
 const genAI = new GoogleGenerativeAI(API_KEY);
 
 const generationConfig = {
-  temperature: 0.6, // Slightly more deterministic for structured output
+  temperature: 0.6,
   topP: 0.95,
   topK: 60,
   maxOutputTokens: 2048,
-  responseMimeType: "application/json", // AI must always respond with JSON
+  responseMimeType: "application/json",
 };
 
 const safetySettings = [
@@ -40,7 +40,7 @@ function getTomorrowsDate() { return format(addDays(new Date(), 1), 'yyyy-MM-dd'
 export type InteractionMode = 'quickCommand' | 'chatSession';
 
 export interface AiOperation {
-  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "updateTask" | "unknown" | "clarification" | "suggestion"; // Clarification/suggestion are now more about the nature of the *operation* if any, not the top-level reply type.
+  action: "addTask" | "addNote" | "addGoal" | "addEvent" | "updateTask" | "unknown" | "clarification" | "suggestion";
   payload: Partial<Task & Note & Goal & AppEvent & {
     taskIdToUpdate?: string; 
     text?: string; name?: string; title?: string; content?: string; 
@@ -48,7 +48,7 @@ export interface AiOperation {
     date?: string; description?: string; 
     dueDate?: string; 
     category?: Category;
-    message?: string; // For clarification/suggestion payloads, or error messages in 'unknown'
+    message?: string; 
     recurrenceRule?: RecurrenceRule;
     subTasks?: { text: string }[]; 
     subTasksToAdd?: { text: string }[]; 
@@ -58,16 +58,15 @@ export interface AiOperation {
   error?: string; 
 }
 
-// This interface defines the expected JSON structure from Gemini
 export interface GeminiApiResponse {
-  reply: string; // Always present: the natural language response for the user
-  operations: AiOperation[]; // Can be an empty array if no DB actions are intended
+  reply: string; 
+  operations: AiOperation[];
 }
 
 
 export interface ProcessedGeminiOutput {
-  reply: string; // The user-facing text reply
-  operations: AiOperation[]; // Parsed and validated operations
+  reply: string; 
+  operations: AiOperation[];
   originalInputParts: Part[];
   overallError?: string;
 }
@@ -76,7 +75,7 @@ export async function processWithGemini(
     inputParts: Part[],
     currentCategory: Category,
     availableCategories: Category[],
-    interactionMode: InteractionMode, // New parameter
+    interactionMode: InteractionMode, 
     persistentUserContextSummary?: string,
     inSessionChatHistory?: Array<Content>
 ): Promise<ProcessedGeminiOutput> {
@@ -95,7 +94,6 @@ If no category is specified or can be reasonably inferred for an item to be crea
 
 Each object in the "operations" array (if any) MUST have "action" and "payload" fields.
 Valid "action" values are: "addTask", "addNote", "addGoal", "addEvent", "updateTask", "unknown".
-(The "clarification" and "suggestion" actions are less common for the 'operations' array now, as the main 'reply' field handles conversational aspects. Use 'unknown' if an operation cannot be formed).
 `;
 
   if (interactionMode === 'chatSession') {
@@ -107,7 +105,7 @@ Valid "action" values are: "addTask", "addNote", "addGoal", "addEvent", "updateT
 - If the user is just chatting, asking questions, or brainstorming, your "reply" should be conversational, and the "operations" array should be empty.
 - If critical information for a requested action is missing even after checking context, your "reply" should ask for the specific missing piece, and the "operations" array should be empty.
 `;
-  } else { // quickCommand mode
+  } else { 
     systemInstructionText += `
 **Quick Command Mode Active:**
 - Assume the user's input is a direct command. Prioritize generating relevant "operations".
@@ -128,6 +126,7 @@ Valid "action" values are: "addTask", "addNote", "addGoal", "addEvent", "updateT
 Handle dates intelligently (e.g., "next Tuesday", "tomorrow at 5pm").
 If audio input is provided, interpret the speech. For simple greetings like "hello" (audio or text) in chat mode, just provide a conversational "reply" and empty "operations".
 If audio is background noise, the "reply" should state you couldn't understand, and "operations" should be empty or contain an "unknown" operation.
+Ensure any recurrenceRule adheres to the defined structure.
 `;
 
   if (persistentUserContextSummary && persistentUserContextSummary.trim() !== '') {
@@ -155,7 +154,6 @@ If audio is background noise, the "reply" should state you couldn't understand, 
     let responseText = result.response.text();
     console.log("[Gemini Raw Response Text]:", responseText);
 
-    // Robust JSON extraction
     const jsonMatch = responseText.match(/```json\n([\s\S]*?)\n```/);
     if (jsonMatch && jsonMatch[1]) {
         responseText = jsonMatch[1];
@@ -181,7 +179,6 @@ If audio is background noise, the "reply" should state you couldn't understand, 
       return { reply: `Sorry, there was an issue processing my thoughts. Details: ${(parseError as Error).message}`, operations: [], originalInputParts: inputParts, overallError: `AI response format error: Invalid JSON. ${(parseError as Error).message}`};
     }
 
-    // Validate top-level structure
     if (typeof parsedJson.reply !== 'string') {
         console.warn("[Gemini Warning] AI response missing or invalid 'reply' field. Response:", responseText);
         parsedJson.reply = "I'm not sure how to respond to that. Can you try again?";
@@ -199,7 +196,6 @@ If audio is background noise, the "reply" should state you couldn't understand, 
         }
         if (!payload || typeof payload !== 'object') payload = {};
 
-        // Category assignment logic (remains similar)
         if ((payload.category === "All Projects" || !payload.category) && action !== 'unknown') {
             if (currentCategory !== "All Projects" && availableCategories.includes(currentCategory)) {
                 payload.category = currentCategory;
@@ -208,7 +204,6 @@ If audio is background noise, the "reply" should state you couldn't understand, 
                 payload.category = firstSpecificCategory || (availableCategories.length > 0 && availableCategories[0] !== "All Projects" ? availableCategories[0] : "Personal Life");
             }
         }
-        // Date parsing logic (remains similar)
         if ((action === "addTask" || action === "updateTask") && payload.dueDate) {
             try {
                 const parsedDate = parseISO(payload.dueDate as string);
@@ -258,31 +253,44 @@ If audio is background noise, the "reply" should state you couldn't understand, 
 
 
 export async function generateUserContextSummary(
-    chatSessionHistory: Array<Content>
+    chatSessionHistory: Array<Content>,
+    existingSummary?: string // Added existingSummary parameter
 ): Promise<string> {
-    if (!chatSessionHistory || chatSessionHistory.length === 0) {
-        return "";
-    }
-    // Filter out AI "thinking" messages from history before sending for summary
     const historyForSummary = chatSessionHistory.filter(c => !(c.role === 'model' && c.parts.some(p => (p as {text:string}).text?.includes("AIDA is thinking..."))));
-    if (historyForSummary.length === 0) return "";
+    if (historyForSummary.length === 0 && !existingSummary) {
+        return ""; // Nothing to summarize if both are empty
+    }
+
+    let promptForSummary = "The following is a transcript of a recent conversation with a user. ";
+    if (existingSummary && existingSummary.trim() !== "") {
+        promptForSummary = `Here is the existing summary of the user's context: "${existingSummary}". \nNow, considering that existing summary, and the following new conversation transcript, please generate an updated, consolidated summary. The new summary should incorporate key new information from the recent conversation, maintain relevant insights from the existing summary, and prioritize new information if it conflicts or supersedes old details. Ensure the result is concise and coherent, avoiding redundancy. Output ONLY the new, complete summary text.\n\nRecent Conversation Transcript:\n`;
+    } else {
+        promptForSummary = "Please summarize the key information, decisions, user preferences, ongoing plans, or unresolved topics from the following conversation. Focus on details that would be helpful for a personal assistant to remember for future interactions with this user. Keep the summary concise, informative, and neutral in tone. Output ONLY the summary text.\n\nConversation Transcript:\n";
+    }
+    
+    // Construct content for summary generation
+    const summaryContents: Content[] = [];
+    if (existingSummary && existingSummary.trim() !== "") {
+        // We are including existing summary in the system/user prompt.
+        // The history here should primarily be the new session.
+    }
+    summaryContents.push(...historyForSummary);
+    // Add a final instruction to the *user* part of the content to reinforce the summarization task.
+    summaryContents.push({ role: 'user', parts: [{ text: "Based on all the above (including any prior summary provided in the instructions and this recent conversation), provide the new consolidated summary."}]});
 
 
-    const systemInstructionText = `You are an AI assistant. Your task is to summarize the key information, decisions, user preferences, ongoing plans, or unresolved topics from the following conversation history. 
-Focus on details that would be helpful for a personal assistant to remember for future interactions with this user.
-Keep the summary concise, informative, and neutral in tone. Output ONLY the summary text, nothing else.
-For example: "User is planning a trip to Japan in December, interested in budget airlines. They often work on 'Project X' and prefer morning meetings. They are currently looking for vegetarian recipes."
-`;
+    const systemInstructionText = promptForSummary; // The detailed prompt is now the system instruction
 
     const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
     const request: GenerateContentRequest = {
-        contents: [...historyForSummary, { role: 'user', parts: [{ text: "Please summarize our conversation for future reference." }] }],
+        // Pass only the new chat history here, existing summary is in the system prompt
+        contents: summaryContents, 
         generationConfig: {
             temperature: 0.3,
             topP: 0.95,
             topK: 40,
-            maxOutputTokens: 512, 
+            maxOutputTokens: 1024, // Increased for potentially merging summaries
             responseMimeType: "text/plain",
         },
         safetySettings: safetySettings,
@@ -292,10 +300,10 @@ For example: "User is planning a trip to Japan in December, interested in budget
     try {
         const result = await model.generateContent(request);
         const summaryText = result.response.text();
-        console.log("[Gemini User Context Summary]:", summaryText);
+        console.log("[Gemini User Context Summary - New/Merged]:", summaryText);
         return summaryText.trim();
     } catch (error) {
         console.error("[Gemini Error] Failed to generate user context summary:", error);
-        return "";
+        return existingSummary || ""; // Fallback to existing summary or empty if error
     }
 }

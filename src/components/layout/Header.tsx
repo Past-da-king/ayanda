@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { LogIn, LogOut, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote, UserCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react'; // Removed useCallback as fetchUserProfile moved
+import { LogIn, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote, UserCircle } from 'lucide-react';
 import { AyandaLogoIcon } from './AyandaLogoIcon';
 import { cn } from '@/lib/utils';
-import { useSession, signOut } from 'next-auth/react';
+import { useSession } from 'next-auth/react'; // signOut is no longer called directly here
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,7 +14,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ThemeCustomizer } from './ThemeCustomizer';
-import { ProfileCard } from './ProfileCard'; // Import new ProfileCard
+// ProfileCard is removed
 import { SearchResultItem } from '@/types'; 
 import { usePathname, useRouter } from 'next/navigation';
 
@@ -28,12 +28,7 @@ const getIconForType = (type: SearchResultItem['type']) => {
   }
 };
 
-interface UserProfileState {
-  id?: string;
-  name?: string | null;
-  email?: string | null;
-  userContextSummary?: string;
-}
+// Removed UserProfileState and related logic from Header
 
 export function Header() {
   const { data: session, status } = useSession();
@@ -44,40 +39,10 @@ export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchPopoverRef = useRef<HTMLDivElement>(null);
 
-  const [isProfilePopoverOpen, setIsProfilePopoverOpen] = useState(false);
-  const [userProfileData, setUserProfileData] = useState<UserProfileState | null>(null);
-  const [isProfileLoading, setIsProfileLoading] = useState(false);
-
   const currentPathname = usePathname();
   const router = useRouter();
 
-  const fetchUserProfile = useCallback(async () => {
-    if (status === "authenticated" && session?.user?.id) {
-      setIsProfileLoading(true);
-      try {
-        const res = await fetch('/api/profile');
-        if (res.ok) {
-          const data: UserProfileState = await res.json();
-          setUserProfileData(data);
-        } else {
-          setUserProfileData(null); // Reset or handle error
-          console.error("Failed to fetch profile data");
-        }
-      } catch (error) {
-        console.error("Error fetching profile data:", error);
-        setUserProfileData(null);
-      } finally {
-        setIsProfileLoading(false);
-      }
-    }
-  }, [status, session]);
-
-  useEffect(() => {
-    if (isProfilePopoverOpen) {
-      fetchUserProfile();
-    }
-  }, [isProfilePopoverOpen, fetchUserProfile]);
-
+  // Profile popover state and fetch logic removed from here
 
   const handleSearch = async (query: string) => {
     if (query.trim().length < 2) {
@@ -137,7 +102,8 @@ export function Header() {
     setIsSearchPopoverOpen(false);
   };
 
-  const showSearch = status === "authenticated" && !["/login", "/register", "/landing"].includes(currentPathname);
+  const showSearch = status === "authenticated" && !["/login", "/register", "/landing", "/profile"].includes(currentPathname);
+
 
   return (
     <header 
@@ -213,9 +179,7 @@ export function Header() {
           <div className="w-9 h-9 bg-muted animate-pulse rounded-full"></div>
         ) : session?.user ? (
           <>
-            <span className="text-sm text-muted-foreground hidden sm:inline">
-              {userProfileData?.name || session.user.name || session.user.email?.split('@')[0]}
-            </span>
+            {/* Display name is removed here, can be shown on profile page */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent-foreground" title="Customize Theme">
@@ -227,27 +191,18 @@ export function Header() {
               </PopoverContent>
             </Popover>
             
-            {/* Profile Popover */}
-            <Popover open={isProfilePopoverOpen} onOpenChange={setIsProfilePopoverOpen}>
-              <PopoverTrigger asChild>
-                <Button
+            {/* Profile Link instead of Popover */}
+            <Link href="/profile" passHref legacyBehavior>
+                 <Button
                   variant="ghost"
                   size="icon"
                   className="text-muted-foreground hover:text-accent-foreground rounded-full"
                   title="My Profile"
+                  asChild // Make button act as a child of Link for proper behavior
                 >
-                  <UserCircle className="w-6 h-6" />
+                  <a><UserCircle className="w-6 h-6" /></a>
                 </Button>
-              </PopoverTrigger>
-              <PopoverContent className="w-auto p-0" align="end">
-                <ProfileCard 
-                  user={userProfileData} 
-                  isLoading={isProfileLoading}
-                  onSignOut={() => signOut({ callbackUrl: '/landing' })}
-                  onRefreshContext={fetchUserProfile} // Pass the fetch function for manual refresh
-                />
-              </PopoverContent>
-            </Popover>
+            </Link>
           </>
         ) : (
           <>
@@ -263,7 +218,7 @@ export function Header() {
             </Popover>
             <Link href="/login" legacyBehavior>
               <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent-foreground" title="Sign In">
-                <LogIn className="w-5 h-5" />
+                <a><LogIn className="w-5 h-5" /></a>
               </Button>
             </Link>
           </>
