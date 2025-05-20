@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
 import { FooterChat } from '@/components/layout/FooterChat';
-import { AiAssistantWidget, ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget'; // Import ExecutedOperationInfo
+import { AiAssistantWidget, ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget';
 import { TasksWidget } from '@/components/dashboard/TasksWidget';
 import { CalendarWidget } from '@/components/dashboard/CalendarWidget';
 import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
@@ -30,7 +30,7 @@ interface AiChatMessage {
   sender: 'user' | 'ai';
   message: string;
   timestamp?: Date;
-  executedOps?: ExecutedOperationInfo[]; // Added to store executed operations for AI messages
+  executedOps?: ExecutedOperationInfo[];
 }
 
 export default function HomePage() {
@@ -136,7 +136,7 @@ export default function HomePage() {
           body: JSON.stringify({ 
             chatHistory: formattedHistoryForSummary, 
             isEndingChatSession: true,
-            currentCategory: currentCategory,
+            currentCategory: currentCategory, 
             interactionMode: 'chatSession' 
           }),
         });
@@ -183,7 +183,6 @@ export default function HomePage() {
             }),
         });
         
-        // Assuming API response structure: { aiMessage: string, executedOperationsLog?: ExecutedOperationInfo[], error?: string }
         const result: { aiMessage: string; executedOperationsLog?: ExecutedOperationInfo[]; error?: string } = await res.json();
         
         if (res.ok && result.aiMessage) {
@@ -191,13 +190,13 @@ export default function HomePage() {
                 sender: 'ai',
                 message: result.aiMessage,
                 timestamp: new Date(),
-                executedOps: result.executedOperationsLog // Store executed ops with the AI's message
+                executedOps: result.executedOperationsLog 
             };
 
             if (mode === 'chatSession') {
                 setAiChatHistory(prev => [...prev, aiReplyMessage]);
                 if (result.executedOperationsLog && result.executedOperationsLog.some(op => op.success)) {
-                    fetchData(currentCategory); // Refresh data if operations were successful
+                    fetchData(currentCategory); 
                 }
             } else { 
                 setAiMessageForCollapsedWidget(result.aiMessage);
@@ -242,16 +241,21 @@ export default function HomePage() {
   };
 
   const handleAudioCommandFromFooter = (audioBase64: string, mimeType: string) => {
-     if (isAiChatModeActive) {
-        setAiChatHistory(prev => [...prev, { sender: 'ai', message: "AIDA: Audio input is not processed while chat is active. Please use text or close the chat.", timestamp: new Date() }]);
-        return;
-    }
+    // Audio input now works in both chat and quick command mode.
     const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
     const instructionPart: Part = { text: "This is an audio command. Please process it." };
-    setAiMessageForCollapsedWidget(null);
-    sendAiRequest([audioPart, instructionPart], [], 'quickCommand');
-  };
+    const messageParts = [audioPart, instructionPart];
 
+    if (isAiChatModeActive) {
+        // Add a placeholder or transcript to chat history if desired, or let AI handle it.
+        // For now, we'll just send it. User will see AI's interpretation in reply.
+        // You could add a "🎤 Audio sent" message to chat history here if you want immediate user feedback.
+        sendAiRequest(messageParts, aiChatHistory, 'chatSession');
+    } else {
+        setAiMessageForCollapsedWidget(null);
+        sendAiRequest(messageParts, [], 'quickCommand');
+    }
+  };
 
   const handleCrudFeedback = (message: string, mode: 'success' | 'error') => {
     const feedbackMessage = `${mode === 'error' ? 'Error: ' : ''}${message}`;
@@ -446,8 +450,7 @@ export default function HomePage() {
     
     if (isAiChatModeActive) {
         return (
-            // This container will be centered by the main layout styling for full-screen chat
-            <div className="h-full w-full max-w-4xl mx-auto"> {/* Added max-width and mx-auto for centering */}
+            <div className="h-full w-full max-w-4xl mx-auto">
                 <AiAssistantWidget
                     initialMessage={null}
                     isChatModeActive={true}
@@ -506,7 +509,7 @@ export default function HomePage() {
               : "pt-[calc(5rem+1.5rem)]";
 
   const mainHeightStyle = isAiChatModeActive
-      ? { height: "calc(100vh - 5rem - 70px)" } 
+      ? { height: "calc(100vh - 5rem - 70px)" } // Approx 70px for FooterChat
       : showProjectBar 
           ? { height: "calc(100vh - (5rem + 2.875rem) - 70px)" } 
           : { height: "calc(100vh - 5rem - 70px)" }; 
@@ -523,8 +526,8 @@ export default function HomePage() {
       )}
       <main 
         className={cn(
-            "flex-grow px-6 pb-6 overflow-y-auto custom-scrollbar-fullscreen",
-            isAiChatModeActive && "flex justify-center", // Center the chat view content
+            "flex-grow px-6 pb-6 overflow-y-auto custom-scrollbar-fullscreen", // pb-6 to leave space for footer chat
+            isAiChatModeActive && "flex justify-center", 
             mainPaddingTop
         )}
         style={mainHeightStyle}
