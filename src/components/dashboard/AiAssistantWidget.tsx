@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useRef, useEffect, useState } from 'react';
-import { Star, MessageSquarePlus, XSquare, ChevronDown, ChevronUp } from 'lucide-react';
+import { Star, MessageSquarePlus, XSquare, ChevronDown, ChevronUp, Mic } from 'lucide-react'; // Added Mic icon
 import { DashboardCardWrapper } from './DashboardCardWrapper';
 import { cn } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -13,11 +13,12 @@ export interface ExecutedOperationInfo {
   success: boolean;
   error?: string;
 }
-interface AiChatMessage { 
-  sender: 'user' | 'ai';
+export interface AiChatMessage { // Exporting for page.tsx
+  sender: 'user' | 'ai' | 'system'; // Added 'system' for audio placeholder
   message: string;
   timestamp?: Date;
   executedOps?: ExecutedOperationInfo[];
+  isAudioPlaceholder?: boolean; // Flag for audio placeholder
 }
 
 interface AiAssistantWidgetProps {
@@ -33,9 +34,6 @@ const DEFAULT_MESSAGE = "Hi there! How can I help you make the most of your day?
 const ExecutedOpsDisplay: React.FC<{ ops: ExecutedOperationInfo[] }> = ({ ops }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   if (!ops || ops.length === 0) return null;
-
-  const successfulOps = ops.filter(op => op.success);
-  // const failedOps = ops.filter(op => !op.success); // Kept for potential future use
 
   return (
     <div className="mt-2 pt-2 border-t border-border-main/20 text-xs">
@@ -81,7 +79,6 @@ export function AiAssistantWidget({
   }, [chatHistory, isChatModeActive]);
 
   if (!isChatModeActive) {
-    // Collapsed Dashboard Widget View
     return (
       <DashboardCardWrapper
         title="AIDA"
@@ -103,14 +100,8 @@ export function AiAssistantWidget({
     );
   }
 
-  // Full-Screen Chat Mode UI
   return (
-    // This is the main container for the full-screen chat.
-    // Removed: bg-widget-background, border, border-border-main, rounded-md, shadow-xl
-    // It will now inherit the page background (var(--background-color-val))
-    // and appear borderless.
     <div className="flex flex-col h-full w-full"> 
-      {/* Header for Chat Mode - This will still have its own bottom border */}
       <div className="flex justify-between items-center p-4 border-b border-border-main shrink-0">
         <div className="flex items-center gap-2">
           <Star className="w-6 h-6 accent-text" /> 
@@ -126,25 +117,29 @@ export function AiAssistantWidget({
         </button>
       </div>
 
-      {/* Chat Messages Area - This will scroll within the available space */}
-      {/* Added pb-24 (96px) for FooterChat spacing, ensuring last message is visible */}
       <div className="flex-grow overflow-y-auto p-4 space-y-4 custom-scrollbar-fullscreen pb-24"> 
         {chatHistory.map((chat, index) => (
           <div
             key={index}
             className={cn(
               "flex flex-col max-w-[85%] w-fit",
-              chat.sender === 'user' ? "self-end items-end ml-auto" : "self-start items-start mr-auto"
+              chat.sender === 'user' || chat.isAudioPlaceholder ? "self-end items-end ml-auto" : "self-start items-start mr-auto"
             )}
           >
             <div
               className={cn(
-                "p-3 rounded-lg shadow-sm", // Bubbles still have shadow & distinct background
+                "p-3 rounded-lg shadow-sm",
                 chat.sender === 'user' ? "bg-primary text-primary-foreground" 
-                                       : "bg-input-bg text-foreground" // AI bubble uses input-bg for slight distinction from page
+                                       : chat.isAudioPlaceholder ? "bg-primary/70 text-primary-foreground italic" // Style for audio placeholder
+                                       : "bg-input-bg text-foreground border border-border-main/20"
               )}
             >
-              {chat.sender === 'ai' ? (
+              {chat.isAudioPlaceholder ? (
+                <div className="flex items-center gap-2 text-sm">
+                  <Mic className="w-4 h-4 shrink-0" /> 
+                  <span>{chat.message}</span>
+                </div>
+              ) : chat.sender === 'ai' ? (
                 <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-1 prose-ul:my-1 prose-ol:my-1">
                   <ReactMarkdown>{chat.message}</ReactMarkdown>
                 </div>
@@ -162,7 +157,7 @@ export function AiAssistantWidget({
             )}
           </div>
         ))}
-        {isProcessingAi && chatHistory.length > 0 && chatHistory[chatHistory.length-1].sender === 'user' && (
+        {isProcessingAi && chatHistory.length > 0 && (chatHistory[chatHistory.length-1].sender === 'user' || chatHistory[chatHistory.length-1].isAudioPlaceholder) && (
           <div className="self-start flex items-center gap-2 p-3 text-muted-foreground">
             <Star className="w-5 h-5 animate-pulse text-accent-color-val" />
             <span className="text-sm italic">AIDA is thinking...</span>
@@ -170,7 +165,6 @@ export function AiAssistantWidget({
         )}
         <div ref={chatMessagesEndRef} />
       </div>
-      {/* Input is handled by global FooterChat.tsx, which is fixed at the bottom of the viewport */}
     </div>
   );
 }

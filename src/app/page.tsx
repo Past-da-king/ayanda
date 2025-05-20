@@ -7,7 +7,7 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { Header } from '@/components/layout/Header';
 import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
 import { FooterChat } from '@/components/layout/FooterChat';
-import { AiAssistantWidget, ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget';
+import { AiAssistantWidget, ExecutedOperationInfo, AiChatMessage as AiChatMessageImport } from '@/components/dashboard/AiAssistantWidget';
 import { TasksWidget } from '@/components/dashboard/TasksWidget';
 import { CalendarWidget } from '@/components/dashboard/CalendarWidget';
 import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
@@ -26,12 +26,7 @@ import type { InteractionMode } from '@/lib/gemini';
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
 
-interface AiChatMessage {
-  sender: 'user' | 'ai';
-  message: string;
-  timestamp?: Date;
-  executedOps?: ExecutedOperationInfo[];
-}
+type AiChatMessage = AiChatMessageImport;
 
 export default function HomePage() {
   const { data: session, status } = useSession();
@@ -120,53 +115,17 @@ export default function HomePage() {
     }
   }, [fetchData, initialLoadDone, status]); 
 
-  const handleToggleAiChatMode = useCallback(async () => {
-    if (isAiChatModeActive && aiChatHistory.length > 0) {
-      setIsProcessingAi(true);
-      setAiMessageForCollapsedWidget("Finalizing chat with AIDA...");
-      try {
-        const formattedHistoryForSummary: Content[] = aiChatHistory.map(chat => ({
-            role: chat.sender === 'user' ? 'user' : 'model',
-            parts: [{ text: chat.message }]
-        }));
-
-        await fetch('/api/ai', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            chatHistory: formattedHistoryForSummary, 
-            isEndingChatSession: true,
-            currentCategory: currentCategory, 
-            interactionMode: 'chatSession' 
-          }),
-        });
-        setAiMessageForCollapsedWidget("Chat session concluded.");
-      } catch (error) {
-        console.error("Error finalizing chat session for summary:", error);
-        setAiMessageForCollapsedWidget("Error ending chat session.");
-      } finally {
-        setIsProcessingAi(false);
-      }
-      setAiChatHistory([]);
-    }
-    setIsAiChatModeActive(prev => !prev);
-    if (!isAiChatModeActive) { 
-        setAiMessageForCollapsedWidget(null);
-        setCurrentFooterChatMessage(''); 
-    } else {
-        setCurrentFooterChatMessage(''); 
-    }
-  }, [isAiChatModeActive, aiChatHistory, currentCategory]);
-
   const sendAiRequest = useCallback(async (
     messageParts: Part[], 
-    currentChatSessionHistory: AiChatMessage[],
+    currentChatSessionHistoryForRequest: AiChatMessage[], // Use a temporary variable for history being sent
     mode: InteractionMode
   ) => {
     if (status !== "authenticated") return;
     setIsProcessingAi(true);
     
-    const formattedHistoryForApi: Content[] = currentChatSessionHistory.map(chat => ({
+    const formattedHistoryForApi: Content[] = currentChatSessionHistoryForRequest
+      .filter(chat => !chat.isAudioPlaceholder) // Don't send audio placeholders to Gemini
+      .map(chat => ({
         role: chat.sender === 'user' ? 'user' : 'model',
         parts: [{ text: chat.message }]
     }));
@@ -178,13 +137,16 @@ export default function HomePage() {
             body: JSON.stringify({ 
                 parts: messageParts, 
                 currentCategory,
-                chatHistory: mode === 'chatSession' ? formattedHistoryForApi : undefined,
+                chatHistory: mode === 'chatSession' ? formattedHistoryForApi : undefined, 
                 interactionMode: mode,
             }),
         });
         
         const result: { aiMessage: string; executedOperationsLog?: ExecutedOperationInfo[]; error?: string } = await res.json();
         
+        // Before adding the new AI message, remove any "Audio sent..." placeholders from the current user
+        setAiChatHistory(prev => prev.filter(m => !(m.sender === 'user' && m.isAudioPlaceholder)));
+
         if (res.ok && result.aiMessage) {
             const aiReplyMessage: AiChatMessage = {
                 sender: 'ai',
@@ -215,6 +177,7 @@ export default function HomePage() {
     } catch (error) {
         console.error("Error sending command to AI:", error);
         const connectError = "Sorry, I couldn't connect. Please try again.";
+        setAiChatHistory(prev => prev.filter(m => !(m.sender === 'user' && m.isAudioPlaceholder)));
          if(mode === 'chatSession') {
             setAiChatHistory(prev => [...prev, { sender: 'ai', message: connectError, timestamp: new Date() }]);
         } else {
@@ -226,13 +189,67 @@ export default function HomePage() {
   }, [status, currentCategory, fetchData]);
 
 
+  const handleToggleAiChatMode = useCallback(async () => {
+    const wasChatModeActive = isAiChatModeActive;
+    const currentSessionHistoryForSummary = [...aiChatHistory]; 
+
+    setIsAiChatModeActive(prev => !prev); 
+
+    if (wasChatModeActive && currentSessionHistoryForSummary.length > 0) { 
+        setIsProcessingAi(true);
+        setAiMessageForCollapsedWidget("Finalizing chat with AIDA...");
+        try {
+            const formattedHistoryForSummary: Content[] = currentSessionHistoryForSummary
+                .filter(chat => !chat.isAudioPlaceholder) 
+                .map(chat => ({
+                    role: chat.sender === 'user' ? 'user' : 'model',
+                    parts: [{ text: chat.message }]
+            }));
+
+            if (formattedHistoryForSummary.length > 0) {
+                await fetch('/api/ai', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    chatHistory: formattedHistoryForSummary, 
+                    isEndingChatSession: true,
+                    currentCategory: currentCategory, 
+                    interactionMode: 'chatSession' 
+                }),
+                });
+                setAiMessageForCollapsedWidget("Chat session concluded. Context updated.");
+            } else {
+                setAiMessageForCollapsedWidget("Chat session ended.");
+            }
+        } catch (error) {
+            console.error("Error finalizing chat session for summary:", error);
+            setAiMessageForCollapsedWidget("Error ending chat session.");
+        } finally {
+            setIsProcessingAi(false);
+        }
+        setAiChatHistory([]); 
+    }
+    
+    if (!wasChatModeActive) { 
+        setAiMessageForCollapsedWidget(null);
+        setCurrentFooterChatMessage(''); 
+        // Send an empty 'parts' array to trigger initial greeting with context
+        sendAiRequest([], [], 'chatSession'); 
+    } else { 
+        setCurrentFooterChatMessage(''); 
+    }
+  }, [isAiChatModeActive, aiChatHistory, currentCategory, sendAiRequest]);
+
+
   const handleCommandFromFooter = (command: string) => {
     if (!command.trim()) return;
     const commandParts: Part[] = [{ text: command.trim() }];
     
     if (isAiChatModeActive) {
         const newUserMessage: AiChatMessage = { sender: 'user', message: command.trim(), timestamp: new Date() };
+        // Add user message to history immediately for responsive UI
         setAiChatHistory(prev => [...prev, newUserMessage]);
+        // Pass the new state of aiChatHistory to sendAiRequest
         sendAiRequest(commandParts, [...aiChatHistory, newUserMessage], 'chatSession');
     } else {
         setAiMessageForCollapsedWidget(null);
@@ -241,18 +258,22 @@ export default function HomePage() {
   };
 
   const handleAudioCommandFromFooter = (audioBase64: string, mimeType: string) => {
-    // Audio input now works in both chat and quick command mode.
     const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
     const instructionPart: Part = { text: "This is an audio command. Please process it." };
     const messageParts = [audioPart, instructionPart];
+    
+    const audioPlaceholderMessage: AiChatMessage = { 
+        sender: 'user', // Visually group with user actions
+        message: "🎤 Audio input sent...", 
+        timestamp: new Date(),
+        isAudioPlaceholder: true 
+    };
 
     if (isAiChatModeActive) {
-        // Add a placeholder or transcript to chat history if desired, or let AI handle it.
-        // For now, we'll just send it. User will see AI's interpretation in reply.
-        // You could add a "🎤 Audio sent" message to chat history here if you want immediate user feedback.
-        sendAiRequest(messageParts, aiChatHistory, 'chatSession');
+        setAiChatHistory(prev => [...prev, audioPlaceholderMessage]);
+        sendAiRequest(messageParts, [...aiChatHistory, audioPlaceholderMessage], 'chatSession');
     } else {
-        setAiMessageForCollapsedWidget(null);
+        setAiMessageForCollapsedWidget("Processing audio command..."); // Or a more subtle indicator
         sendAiRequest(messageParts, [], 'quickCommand');
     }
   };
@@ -381,7 +402,7 @@ export default function HomePage() {
     setCurrentCategory(category);
     if (isAiChatModeActive) {
        setAiChatHistory([]);
-       setAiChatHistory(prev => [...prev, {sender: 'ai', message: `Context switched to ${category}. How can I help you with this project?`}]);
+       sendAiRequest([{text: `Switched to ${category} project view.`}], [], 'chatSession'); // Inform AI about context switch
     }
     setAiMessageForCollapsedWidget(null); 
   };
@@ -509,7 +530,7 @@ export default function HomePage() {
               : "pt-[calc(5rem+1.5rem)]";
 
   const mainHeightStyle = isAiChatModeActive
-      ? { height: "calc(100vh - 5rem - 70px)" } // Approx 70px for FooterChat
+      ? { height: "calc(100vh - 5rem - 70px)" } 
       : showProjectBar 
           ? { height: "calc(100vh - (5rem + 2.875rem) - 70px)" } 
           : { height: "calc(100vh - 5rem - 70px)" }; 
@@ -526,7 +547,7 @@ export default function HomePage() {
       )}
       <main 
         className={cn(
-            "flex-grow px-6 pb-6 overflow-y-auto custom-scrollbar-fullscreen", // pb-6 to leave space for footer chat
+            "flex-grow px-6 pb-6 overflow-y-auto custom-scrollbar-fullscreen",
             isAiChatModeActive && "flex justify-center", 
             mainPaddingTop
         )}

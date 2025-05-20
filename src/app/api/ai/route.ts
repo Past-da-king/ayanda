@@ -10,6 +10,7 @@ import EventModel from '@/models/EventModel';
 import UserModel from '@/models/UserModel';
 import { getToken } from 'next-auth/jwt';
 import type { Part, Content } from '@google/generative-ai';
+import { ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget'; // Ensure this path is correct
 
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 
@@ -43,12 +44,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ message: 'Valid interactionMode is required.' }, { status: 400 });
     }
 
-    if (!parts && !isEndingChatSession) {
-      return NextResponse.json({ message: 'Input parts are required unless ending chat session.' }, { status: 400 });
+    // Relaxed validation: parts can be empty for initial chat greeting or session ending
+    if (!isEndingChatSession && (!parts || (parts as Part[]).length === 0) && interactionMode === 'quickCommand') {
+        return NextResponse.json({ message: 'Input parts are required for quick commands.' }, { status: 400 });
     }
-    if (!currentCategory && !isEndingChatSession && (!parts || (parts as Part[]).length > 0)) {
-        return NextResponse.json({ message: 'currentCategory is required for active commands.' }, { status: 400 });
+    // currentCategory is needed if parts are present and not ending session
+    if (!currentCategory && !isEndingChatSession && parts && (parts as Part[]).length > 0) {
+        return NextResponse.json({ message: 'currentCategory is required when parts are provided.' }, { status: 400 });
     }
+
 
     const userProfile = await UserModel.findOne({ id: userId });
     const persistentUserContextSummary = userProfile?.userContextSummary || "";
@@ -60,16 +64,11 @@ export async function POST(request: NextRequest) {
             : persistentUserContextSummary; 
 
         if (userProfile) {
-            // Only attempt to save if newSummary is defined and different from the existing one,
-            // OR if the existing one is empty and newSummary has content (even if it's an empty string from AI, we might want to persist that "reset").
             if (newSummary !== undefined && newSummary !== persistentUserContextSummary) {
                 userProfile.userContextSummary = newSummary; 
-                
-                // Explicitly mark as modified if setting to empty string from a non-empty or non-existent state
                 if(persistentUserContextSummary && newSummary === "") {
                     userProfile.markModified('userContextSummary');
                 }
-
                 const MAX_CONTEXT_LENGTH = 10000; 
                 if (userProfile.userContextSummary.length > MAX_CONTEXT_LENGTH) {
                     console.warn(`[AI API] User context summary for ${userId} exceeded ${MAX_CONTEXT_LENGTH} chars and was truncated.`);
@@ -78,30 +77,21 @@ export async function POST(request: NextRequest) {
                 
                 try {
                     console.log(`[AI API] Attempting to save user context for user ${userId}. New summary length: ${newSummary.length}. Old summary length: ${persistentUserContextSummary.length}`);
-                    await userProfile.save(); // Removed assignment to savedProfile as it's not strictly needed for verification.
-                    
-                    // Verification fetch
+                    await userProfile.save();
                     const updatedProfileCheck = await UserModel.findOne({ id: userId }).select('userContextSummary');
-                    
                     if (updatedProfileCheck) {
-                        const dbSummary = updatedProfileCheck.userContextSummary || ""; // Ensure it's a string for substring
+                        const dbSummary = updatedProfileCheck.userContextSummary || "";
                         console.log(`[AI API] Verification fetch - DB summary after save: "${dbSummary.substring(0, 100)}..."`);
-                        if (dbSummary === newSummary) {
-                             console.log(`[AI API] SUCCESSFULLY SAVED new summary for user ${userId}.`);
-                        } else {
-                             console.error(`[AI API] DISCREPANCY: New summary NOT fully saved for user ${userId}. DB has: "${dbSummary.substring(0,100)}..." vs Proposed: "${newSummary.substring(0,100)}..."`);
-                        }
-                    } else {
-                        console.error(`[AI API] Verification fetch FAILED for user ${userId} after save attempt.`);
-                    }
+                        if (dbSummary === newSummary) { console.log(`[AI API] SUCCESSFULLY SAVED new summary for user ${userId}.`); } 
+                        else { console.error(`[AI API] DISCREPANCY: New summary NOT fully saved for user ${userId}. DB has: "${dbSummary.substring(0,100)}..." vs Proposed: "${newSummary.substring(0,100)}..."`); }
+                    } else { console.error(`[AI API] Verification fetch FAILED for user ${userId} after save attempt.`); }
                     return NextResponse.json({ aiMessage: "Chat session concluded. User context updated.", operations: [] }, { status: 200 });
-
                 } catch (saveError) {
                     console.error(`[AI API] Error saving user profile for user ${userId}:`, saveError);
                     return NextResponse.json({ aiMessage: "Chat session ended, but failed to save updated user context.", error: (saveError as Error).message, operations: [] }, { status: 500 });
                 }
             } else {
-                 console.log(`[AI API] User context for user ${userId} unchanged (new summary is same as old, or new is undefined). No save needed.`);
+                 console.log(`[AI API] User context for user ${userId} unchanged. No save needed.`);
                  return NextResponse.json({ aiMessage: "Chat session ended. User context remains unchanged.", operations: [] }, { status: 200 });
             }
         } else {
@@ -110,13 +100,12 @@ export async function POST(request: NextRequest) {
         }
     }
     
-    if (!parts || !Array.isArray(parts) || parts.length === 0) {
-         return NextResponse.json({ message: 'Input parts are required for active commands.' }, { status: 400 });
-    }
+    // If parts is empty here, it means it's an initial chat call (not ending session)
+    const currentParts = (parts && (parts as Part[]).length > 0) ? parts as Part[] : [{text: ""}]; // Send empty text part if none, for initial greeting
 
     const geminiResult: ProcessedGeminiOutput = await processWithGemini(
-        parts as Part[], 
-        currentCategory as Category, 
+        currentParts, 
+        currentCategory as Category, // Should be valid if currentParts is not empty, or for initial chat
         ["All Projects", ...baseAvailableCategories],
         interactionMode as InteractionMode,
         persistentUserContextSummary,
