@@ -1,13 +1,7 @@
-import {
-  GoogleGenerativeAI,
-  HarmCategory,
-  HarmBlockThreshold,
-  Part,
-  GenerateContentRequest,
-  Content, 
-} from "@google/generative-ai"; 
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold, Part, GenerateContentRequest, Content } from "@google/genai";
 
-import { Category, Task, Goal, Note, Event as AppEvent, RecurrenceRule, SubTask } from '@/types';
+// Removed SubTask as it's unused in this file
+import { Category, Task, Goal, Note, Event as AppEvent, RecurrenceRule } from '@/types';
 import { format, addDays, parseISO, isValid } from 'date-fns';
 
 const API_KEY = process.env.GEMINI_API_KEY;
@@ -16,9 +10,10 @@ if (!API_KEY) {
   throw new Error('Please define the GEMINI_API_KEY environment variable inside .env.local');
 }
 
-const genAI = new GoogleGenerativeAI(API_KEY);
+// Removed global genAI instance. It will be created locally in each function.
 
-const generationConfig = {
+// Top-level generationConfig and safetySettings remain, to be passed into getGenerativeModel
+const generationConfig_global = { 
   temperature: 0.6,
   topP: 0.95,
   topK: 60,
@@ -26,7 +21,7 @@ const generationConfig = {
   responseMimeType: "application/json",
 };
 
-const safetySettings = [
+const safetySettings_global = [ 
   { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE, },
   { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE, },
   { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE, },
@@ -67,17 +62,17 @@ export interface GeminiApiResponse {
 export interface ProcessedGeminiOutput {
   reply: string; 
   operations: AiOperation[];
-  originalInputParts: Part[];
+  originalInputParts: Part[]; // Using direct import
   overallError?: string;
 }
 
 export async function processWithGemini(
-    inputParts: Part[],
+    inputParts: Part[], // Using direct import
     currentCategory: Category,
     availableCategories: Category[],
     interactionMode: InteractionMode, 
     persistentUserContextSummary?: string,
-    inSessionChatHistory?: Array<Content>
+    inSessionChatHistory?: Array<Content> // Using direct import
 ): Promise<ProcessedGeminiOutput> {
   
   const today = getTodaysDate();
@@ -133,24 +128,27 @@ Ensure any recurrenceRule adheres to the defined structure.
     systemInstructionText += `\n\nIMPORTANT PERSISTENT USER CONTEXT (Remember this for all interactions): "${persistentUserContextSummary}"`;
   }
   
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+  if (!API_KEY) throw new Error('GEMINI_API_KEY is not defined'); // Already checked at module start, but good for safety
+  const genAI_local = new GoogleGenAI(API_KEY);
+
+  const modelInstance = genAI_local.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      generationConfig: generationConfig_global, 
+      safetySettings: safetySettings_global,     
+      systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] }
+  });
   
-  const contents: Content[] = [];
+  const contentsForRequest: Content[] = []; 
   if (inSessionChatHistory && inSessionChatHistory.length > 0) {
     const filteredHistory = inSessionChatHistory.filter(c => !(c.role === 'model' && c.parts.some(p => (p as {text:string}).text?.includes("AIDA is thinking..."))));
-    contents.push(...filteredHistory);
+    contentsForRequest.push(...filteredHistory);
   }
-  contents.push({ role: "user", parts: inputParts });
+  contentsForRequest.push({ role: "user", parts: inputParts });
 
-  const request: GenerateContentRequest = {
-      contents: contents,
-      generationConfig: generationConfig,
-      safetySettings: safetySettings,
-      systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] }
-  };
+  const requestObject: GenerateContentRequest = { contents: contentsForRequest };
     
   try {
-    const result = await model.generateContent(request);
+    const result = await modelInstance.generateContent(requestObject);
     let responseText = result.response.text();
     console.log("[Gemini Raw Response Text]:", responseText);
 
@@ -188,9 +186,10 @@ Ensure any recurrenceRule adheres to the defined structure.
         parsedJson.operations = [];
     }
     
-    const processedOperations: AiOperation[] = parsedJson.operations.map((op: any) => {
+    const processedOperations: AiOperation[] = parsedJson.operations.map((op: AiOperation) => {
         let { action, payload } = op;
-        if (!action || typeof action !== 'string' || !["addTask", "addNote", "addGoal", "addEvent", "updateTask", "unknown"].includes(action)) {
+        // Basic validation for action, assuming payload structure is handled by Gemini or further downstream
+        if (!action || typeof action !== 'string' || !["addTask", "addNote", "addGoal", "addEvent", "updateTask", "unknown", "clarification", "suggestion"].includes(action)) {
             console.warn(`[Gemini Warning] Invalid action type received: ${action}. Defaulting to 'unknown'.`);
             action = "unknown"; 
         }
@@ -208,7 +207,7 @@ Ensure any recurrenceRule adheres to the defined structure.
             try {
                 const parsedDate = parseISO(payload.dueDate as string);
                 payload.dueDate = isValid(parsedDate) ? format(parsedDate, 'yyyy-MM-dd') : undefined;
-            } catch (e) { payload.dueDate = undefined; }
+            } catch { payload.dueDate = undefined; } 
         }
         if (action === "addEvent" && payload.date) {
             try {
@@ -217,13 +216,13 @@ Ensure any recurrenceRule adheres to the defined structure.
                     parsedEventDate = parseISO(`${payload.date}T12:00:00.000Z`);
                 }
                 payload.date = isValid(parsedEventDate) ? parsedEventDate.toISOString() : undefined;
-            } catch (e) { payload.date = undefined; }
+            } catch { payload.date = undefined; } 
         }
         if (payload.recurrenceRule?.endDate) {
             try {
                 const parsedEndDate = parseISO(payload.recurrenceRule.endDate as string);
                 payload.recurrenceRule.endDate = isValid(parsedEndDate) ? format(parsedEndDate, 'yyyy-MM-dd') : undefined;
-            } catch (e) { if (payload.recurrenceRule) payload.recurrenceRule.endDate = undefined; }
+            } catch { if (payload.recurrenceRule) payload.recurrenceRule.endDate = undefined; } 
         }
         
         const operation: AiOperation = { action, payload };
@@ -253,8 +252,8 @@ Ensure any recurrenceRule adheres to the defined structure.
 
 
 export async function generateUserContextSummary(
-    chatSessionHistory: Array<Content>,
-    existingSummary?: string // Added existingSummary parameter
+    chatSessionHistory: Array<Content>, // Using direct import
+    existingSummary?: string
 ): Promise<string> {
     const historyForSummary = chatSessionHistory.filter(c => !(c.role === 'model' && c.parts.some(p => (p as {text:string}).text?.includes("AIDA is thinking..."))));
     if (historyForSummary.length === 0 && !existingSummary) {
@@ -269,36 +268,35 @@ export async function generateUserContextSummary(
     }
     
     // Construct content for summary generation
-    const summaryContents: Content[] = [];
+    const summaryContents: Content[] = []; // Using direct import
     if (existingSummary && existingSummary.trim() !== "") {
         // We are including existing summary in the system/user prompt.
-        // The history here should primarily be the new session.
     }
     summaryContents.push(...historyForSummary);
-    // Add a final instruction to the *user* part of the content to reinforce the summarization task.
     summaryContents.push({ role: 'user', parts: [{ text: "Based on all the above (including any prior summary provided in the instructions and this recent conversation), provide the new consolidated summary."}]});
 
+    const systemInstructionForSummary = promptForSummary;
 
-    const systemInstructionText = promptForSummary; // The detailed prompt is now the system instruction
-
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-
-    const request: GenerateContentRequest = {
-        // Pass only the new chat history here, existing summary is in the system prompt
-        contents: summaryContents, 
-        generationConfig: {
+    if (!API_KEY) throw new Error('GEMINI_API_KEY is not defined for summary'); // Already checked
+    const genAI_local_summary = new GoogleGenAI(API_KEY);
+    
+    const modelInstanceSummary = genAI_local_summary.getGenerativeModel({
+        model: "gemini-1.5-flash",
+        generationConfig: { 
             temperature: 0.3,
             topP: 0.95,
             topK: 40,
-            maxOutputTokens: 1024, // Increased for potentially merging summaries
+            maxOutputTokens: 1024, 
             responseMimeType: "text/plain",
         },
-        safetySettings: safetySettings,
-        systemInstruction: { role: "system", parts: [{ text: systemInstructionText }] }
-    };
+        safetySettings: safetySettings_global, 
+        systemInstruction: { role: "system", parts: [{ text: systemInstructionForSummary }] }
+    });
+    
+    const requestObjectSummary: GenerateContentRequest = { contents: summaryContents };
 
     try {
-        const result = await model.generateContent(request);
+        const result = await modelInstanceSummary.generateContent(requestObjectSummary);
         const summaryText = result.response.text();
         console.log("[Gemini User Context Summary - New/Merged]:", summaryText);
         return summaryText.trim();
