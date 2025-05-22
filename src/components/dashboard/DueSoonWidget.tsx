@@ -2,11 +2,20 @@ import React from 'react';
 import { Task, Event as AppEvent } from '@/types';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
 import { cn } from '@/lib/utils';
-import { format, parseISO, addDays, startOfDay, isSameDay, isTomorrow as dateFnsIsTomorrow } from 'date-fns';
+import { format, parseISO, addDays, startOfDay, isSameDay, isTomorrow as dateFnsIsTomorrow, addMonths, addYears } from 'date-fns';
 
 // Helper to get next occurrence for summary
 const getNextOccurrenceForSummary = (item: Task | AppEvent, fromDate: Date = new Date()): Date | null => {
-  const baseItemDate = item.dueDate ? parseISO(item.dueDate) : parseISO(item.date); // Task has dueDate, Event has date
+  let itemDateStr: string;
+  if ('dueDate' in item && item.dueDate) {
+    itemDateStr = item.dueDate;
+  } else if ('date' in item && item.date) {
+    itemDateStr = item.date;
+  } else {
+    return null; // Or handle error appropriately
+  }
+  const baseItemDate = parseISO(itemDateStr);
+
   if (!item.recurrenceRule) {
     return startOfDay(baseItemDate) >= startOfDay(fromDate) ? baseItemDate : null;
   }
@@ -19,7 +28,7 @@ const getNextOccurrenceForSummary = (item: Task | AppEvent, fromDate: Date = new
      if(rule.type === 'weekly' && rule.daysOfWeek && rule.daysOfWeek.length > 0 && !rule.daysOfWeek.includes(checkDate.getDay())) {
         // Find next valid day based on rule starting from checkDate
         for(let i = 0; i < 7; i++) { // Check next 7 days
-            let futureDay = addDays(checkDate, i);
+            const futureDay = addDays(checkDate, i);
             if(rule.daysOfWeek.includes(futureDay.getDay())) {
                 if(rule.endDate && futureDay > parseISO(rule.endDate)) return null;
                 return futureDay;
@@ -42,9 +51,9 @@ const getNextOccurrenceForSummary = (item: Task | AppEvent, fromDate: Date = new
           case 'weekly':
               next = addDays(checkDate, (rule.interval * 7 * (i + (startOfDay(checkDate) < startOfDay(fromDate) ? 1 : 0) ) ));
               if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
-                  let currentDay = next.getDay();
-                  let targetDay = rule.daysOfWeek.find(d => d >= currentDay) ?? rule.daysOfWeek[0];
-                  let diff = targetDay - currentDay;
+              const currentDay = next.getDay();
+              const targetDay = rule.daysOfWeek.find(d => d >= currentDay) ?? rule.daysOfWeek[0];
+              const diff = targetDay - currentDay;
                   if (diff < 0) { // Target day passed for this iteration
                       next = addDays(next, (7 - currentDay) + targetDay); // Go to next week's target day
                   } else {
@@ -52,8 +61,8 @@ const getNextOccurrenceForSummary = (item: Task | AppEvent, fromDate: Date = new
                   }
               }
               break;
-          case 'monthly': next = add(checkDate, { months: rule.interval * (i + (startOfDay(checkDate) < startOfDay(fromDate) ? 1 : 0) ) }); break;
-          case 'yearly': next = add(checkDate, { years: rule.interval * (i + (startOfDay(checkDate) < startOfDay(fromDate) ? 1 : 0) ) }); break;
+      case 'monthly': next = addMonths(checkDate, rule.interval * (i + (startOfDay(checkDate) < startOfDay(fromDate) ? 1 : 0) ) ); break;
+      case 'yearly': next = addYears(checkDate, rule.interval * (i + (startOfDay(checkDate) < startOfDay(fromDate) ? 1 : 0) ) ); break;
           default: return null;
       }
       next = startOfDay(next);
@@ -78,7 +87,7 @@ interface DueSoonWidgetProps {
 export function DueSoonWidget({ tasks = [], events = [], currentProjectId, onNavigateToItem }: DueSoonWidgetProps) {
   const upcomingItems: { type: 'Task' | 'Event'; name: string; date: Date; id: string; isToday: boolean; isTomorrow: boolean; originalCategory: string; }[] = [];
   const today = startOfDay(new Date());
-  const tomorrow = startOfDay(addDays(today, 1));
+  // const tomorrow = startOfDay(addDays(today, 1)); // Unused variable
   const endOfThreeDays = startOfDay(addDays(today, 3)); // Include today, tomorrow, and day after tomorrow
 
   const processItems = <T extends Task | AppEvent>(
@@ -94,7 +103,7 @@ export function DueSoonWidget({ tasks = [], events = [], currentProjectId, onNav
         const itemDateStr = itemType === 'Task' ? (item as Task).dueDate : (item as AppEvent).date;
         if (!itemDateStr) return;
 
-        let nextOccurrenceDate = getNextOccurrenceForSummary(item, today);
+        const nextOccurrenceDate = getNextOccurrenceForSummary(item, today);
         
         if (nextOccurrenceDate && nextOccurrenceDate < endOfThreeDays) {
           upcomingItems.push({

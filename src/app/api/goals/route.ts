@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
   const category = searchParams.get('category');
   try {
-    const query: any = { userId };
+    const query: { userId: string; category?: string } = { userId };
     if (category && category !== "All Projects") {
       query.category = category;
     }

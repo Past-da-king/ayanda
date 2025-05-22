@@ -1,7 +1,10 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
 import { Task as TaskType, RecurrenceRule, SubTask } from '@/types';
 
-export interface ITask extends TaskType, Document {}
+export interface ITask extends Omit<TaskType, 'id' | 'createdAt' | 'updatedAt'>, Document {
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 const RecurrenceRuleSchema = new Schema<RecurrenceRule>({
   type: { type: String, enum: ['daily', 'weekly', 'monthly', 'yearly'], required: true },
@@ -21,7 +24,7 @@ const SubTaskSchema = new Schema<SubTask>({
 
 const TaskSchema: Schema<ITask> = new Schema(
   {
-    id: { type: String, required: true, unique: true },
+    // id: { type: String, required: true, unique: true }, // Removed, Mongoose will use _id
     userId: { type: String, required: true, index: true }, // Added
     text: { type: String, required: true },
     completed: { type: Boolean, required: true, default: false },

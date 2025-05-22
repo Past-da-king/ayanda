@@ -28,7 +28,7 @@ export default function ProfilePage() {
   
   // Dummy states for FooterChat, as it's part of the layout
   // but its AI functionality isn't the primary focus of this page.
-  const [isProcessingAi, setIsProcessingAi] = useState(false);
+  // const [isProcessingAi, setIsProcessingAi] = useState(false); // setIsProcessingAi was unused
   const [currentFooterChatMessage, setCurrentFooterChatMessage] = useState('');
 
 
@@ -86,7 +86,7 @@ export default function ProfilePage() {
             <FooterChat 
                 onSendCommand={handleFooterCommand} 
                 onSendAudioCommand={() => handleFooterCommand("Audio command sent")}
-                isProcessingAi={isProcessingAi}
+                isProcessingAi={false} // Was state, now directly false as it's not used
                 isAiChatModeActive={false} // Chat mode not relevant here
                 currentChatInput={currentFooterChatMessage}
                 onChatInputChange={setCurrentFooterChatMessage}
@@ -169,7 +169,7 @@ export default function ProfilePage() {
         <FooterChat 
             onSendCommand={handleFooterCommand} 
             onSendAudioCommand={() => handleFooterCommand("Audio command sent")}
-            isProcessingAi={isProcessingAi}
+            isProcessingAi={false} // Was state, now directly false as it's not used
             isAiChatModeActive={false}
             currentChatInput={currentFooterChatMessage}
             onChatInputChange={setCurrentFooterChatMessage}

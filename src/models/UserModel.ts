@@ -8,6 +8,8 @@ export interface IUser extends Document {
   passwordHash: string;
   userContextSummary: string; // Added for persistent AI context
   comparePassword(password: string): Promise<boolean>;
+  createdAt?: Date; // Added by timestamps
+  updatedAt?: Date; // Added by timestamps
 }
 
 const UserSchema: Schema<IUser> = new Schema(

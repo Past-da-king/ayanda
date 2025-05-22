@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
   try {
     const searchRegex = { $regex: query, $options: 'i' };
 
-    const baseQuery: any = { userId }; // Always filter by userId
+    const baseQuery: { userId: string; category?: Category } = { userId }; // Always filter by userId
     if (currentCategoryFilter && currentCategoryFilter !== "All Projects") {
       baseQuery.category = currentCategoryFilter;
     }

@@ -45,8 +45,11 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Registration error:', error);
     // Check for Mongoose validation errors
+    interface MongooseValidationError extends Error {
+        errors: { [key: string]: { message: string; kind: string; path: string; value: unknown } };
+    }
     if (error instanceof Error && error.name === 'ValidationError') {
-        return NextResponse.json({ message: 'Validation Error', errors: (error as any).errors }, { status: 400 });
+        return NextResponse.json({ message: 'Validation Error', errors: (error as MongooseValidationError).errors }, { status: 400 });
     }
     return NextResponse.json({ message: 'An unexpected error occurred during registration.' }, { status: 500 });
   }

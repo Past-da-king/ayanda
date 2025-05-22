@@ -26,6 +26,15 @@ const MarkdownCheatsheet: React.FC = () => (
   </div>
 );
 
+interface NotesViewProps {
+  notes: Note[];
+  categories: Category[];
+  currentCategory: Category;
+  onAddNote: (title: string | undefined, content: string, category: Category) => void;
+  onUpdateNote: (noteId: string, title: string | undefined, content: string) => void;
+  onDeleteNote: (noteId: string) => void;
+  onClose: () => void;
+}
 
 export function NotesView({ notes, categories, currentCategory, onAddNote, onUpdateNote, onDeleteNote, onClose }: NotesViewProps) {
   const [newNoteTitle, setNewNoteTitle] = useState('');
@@ -76,8 +85,8 @@ export function NotesView({ notes, categories, currentCategory, onAddNote, onUpd
   };
   
   const filteredNotes = notes
-    .filter(note => currentCategory === "All Projects" || note.category === currentCategory)
-    .sort((a,b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime());
+    .filter((note: Note) => currentCategory === "All Projects" || note.category === currentCategory)
+    .sort((a: Note, b: Note) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime());
 
   return (
     <div className={cn(
@@ -134,7 +143,7 @@ export function NotesView({ notes, categories, currentCategory, onAddNote, onUpd
                         <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent className="bg-widget-background border-border-main text-text-main">
-                        {categories.map(cat => <SelectItem key={cat} value={cat} className="hover:!bg-[rgba(0,220,255,0.1)] focus:!bg-[rgba(0,220,255,0.1)]">{cat}</SelectItem>)}
+                        {categories.map((cat: Category) => <SelectItem key={cat} value={cat} className="hover:!bg-[rgba(0,220,255,0.1)] focus:!bg-[rgba(0,220,255,0.1)]">{cat}</SelectItem>)}
                     </SelectContent>
                 </Select>
             </div>
@@ -146,7 +155,7 @@ export function NotesView({ notes, categories, currentCategory, onAddNote, onUpd
 
         {/* Notes List */}
         <ul className="space-y-3">
-          {filteredNotes.map(note => (
+          {filteredNotes.map((note: Note) => (
             <li key={note.id} className="bg-input-bg border border-border-main rounded-md p-3 hover:border-accent/30 transition-colors">
               {editingNoteId === note.id ? (
                  <div className="space-y-2">

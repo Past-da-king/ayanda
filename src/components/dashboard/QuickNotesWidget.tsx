@@ -1,7 +1,7 @@
 import React from 'react';
 import { Note } from '@/types';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils';
 
 interface QuickNotesWidgetProps {
   notes: Note[]; // Pre-filtered and sorted notes

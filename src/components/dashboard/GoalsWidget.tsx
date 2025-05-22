@@ -1,7 +1,7 @@
 import React from 'react';
 import { Goal } from '@/types';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils';
 
 interface GoalsWidgetProps {
   goals: Goal[]; // Pre-filtered goals

@@ -11,7 +11,7 @@ const initialProjectsData: { id: string, name: Category }[] = [
     { id: 'proj_learning', name: 'Studies' }
 ];
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     // In a real scenario, you might fetch these from a 'Categories' collection in MongoDB
     const categories: Category[] = initialProjectsData.map(p => p.name);

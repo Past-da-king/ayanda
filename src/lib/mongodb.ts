@@ -13,29 +13,50 @@ if (!MONGODB_URI) {
  * in development. This prevents connections growing exponentially
  * during API Route usage.
  */
-let cached = (global as any).mongoose;
-
-if (!cached) {
-  cached = (global as any).mongoose = { conn: null, promise: null };
+interface MongooseCache {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
 }
 
-async function dbConnect() {
-  if (cached.conn) {
-    return cached.conn;
+// Define a type for the global object to include our custom mongoose cache
+// Using 'var' for global declaration merging
+declare global {
+  // eslint-disable-next-line no-var
+  var mongooseCache: MongooseCache | undefined;
+}
+
+let cached: MongooseCache | undefined = global.mongooseCache;
+
+if (!cached) {
+  cached = global.mongooseCache = { conn: null, promise: null };
+}
+
+async function dbConnect(): Promise<typeof mongoose> {
+  if (cached!.conn) { // Non-null assertion: cached is initialized by this point
+    return cached!.conn;
   }
 
-  if (!cached.promise) {
+  if (!cached!.promise) { // Non-null assertion: cached is initialized
     const opts = {
       bufferCommands: false,
     };
 
-    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-      return mongoose;
+    cached!.promise = mongoose.connect(MONGODB_URI!, opts).then((mongooseInstance) => {
+      return mongooseInstance;
     });
   }
-  cached.conn = await cached.promise;
-  return cached.conn;
+  
+  try {
+    cached!.conn = await cached!.promise; // Non-null assertion: cached is initialized
+  } catch (e) {
+    cached!.promise = null; // Reset promise on error to match MongooseCache type
+    throw e;
+  }
+  
+  if (!cached!.conn) { // Non-null assertion: cached is initialized
+    throw new Error('MongoDB connection failed.');
+  }
+  return cached!.conn;
 }
 
 export default dbConnect;
-

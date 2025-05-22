@@ -17,7 +17,7 @@ import { TasksView } from '@/components/views/TasksView';
 import { GoalsView } from '@/components/views/GoalsView';
 import { NotesView } from '@/components/views/NotesView';
 import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenView';
-import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
+import { Task, Goal, Note, Event as AppEvent, ViewMode, Category } from '@/types';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import type { Part, Content } from '@google/generative-ai';
@@ -339,9 +339,9 @@ export default function HomePage() {
     if (status !== "authenticated") return;
     const goal = goals.find(g => g.id === goalId);
     if (!goal) return;
-    const payload: any = { name: name ?? goal.name, unit: unit ?? goal.unit, category: categoryProp ?? goal.category };
+    const payload: Partial<Omit<Goal, 'id' | 'userId' | 'createdAt'>> = { name: name ?? goal.name, unit: unit ?? goal.unit, category: categoryProp ?? goal.category };
     if(targetValue !== undefined) payload.targetValue = targetValue; else payload.targetValue = goal.targetValue;
-    if(currentValue !== undefined) payload.currentValue = Math.max(0, Math.min(currentValue, payload.targetValue)); else payload.currentValue = goal.currentValue;
+    if(currentValue !== undefined) payload.currentValue = Math.max(0, Math.min(currentValue, payload.targetValue ?? Infinity)); else payload.currentValue = goal.currentValue;
     const res = await fetch(`/api/goals/${goalId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
     if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal updated.`, 'success'); } 
     else { handleCrudFeedback(`Failed to update goal.`, 'error'); }

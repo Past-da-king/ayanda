@@ -1,11 +1,14 @@
 import mongoose, { Document, Model, Schema } from 'mongoose';
 import { Goal as GoalType } from '@/types';
 
-export interface IGoal extends GoalType, Document {}
+export interface IGoal extends Omit<GoalType, 'id' | 'createdAt' | 'updatedAt'>, Document {
+  createdAt?: Date;
+  updatedAt?: Date;
+}
 
 const GoalSchema: Schema<IGoal> = new Schema(
   {
-    id: { type: String, required: true, unique: true },
+    // id: { type: String, required: true, unique: true }, // Removed, Mongoose will use _id
     userId: { type: String, required: true, index: true }, // Added
     name: { type: String, required: true },
     currentValue: { type: Number, required: true, default: 0 },

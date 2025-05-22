@@ -1,12 +1,12 @@
 import React from 'react';
 import { Header } from '@/components/layout/Header'; // Assuming Header handles its own auth logic
-import { FooterChat } from '@/components/layout/FooterChat'; // Assuming this is fine for landing
+// import { FooterChat } from '@/components/layout/FooterChat'; // Assuming this is fine for landing
 import { HeroSection } from '@/components/landing/HeroSection';
 import { FeaturesSection } from '@/components/landing/FeaturesSection';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { Metadata } from 'next';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils';
 
 export const metadata: Metadata = {
   title: 'AYANDA | Your Intelligent Personal Assistant',
@@ -18,10 +18,10 @@ export const metadata: Metadata = {
 export default function LandingPage() {
   // The onSendCommand for FooterChat on a landing page might not be relevant
   // or could be a no-op / log to console / specific landing page action
-  const handleLandingPageCommand = (command: string) => {
-    console.log("Landing page AI command attempt:", command);
-    // Perhaps redirect to login or show a message that AI features are for logged-in users
-  };
+  // const handleLandingPageCommand = (command: string) => {
+  //   console.log("Landing page AI command attempt:", command);
+  //   // Perhaps redirect to login or show a message that AI features are for logged-in users
+  // };
 
   return (
     <div className="flex flex-col min-h-screen bg-[var(--background-color-val)] text-[var(--text-color-val)]">

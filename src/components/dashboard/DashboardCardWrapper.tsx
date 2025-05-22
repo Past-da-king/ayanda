@@ -17,6 +17,8 @@ interface DashboardCardWrapperProps {
   onNavigate?: () => void; 
   id?: string; 
   allowExpand?: boolean; 
+  customExpandIcon?: React.ReactNode;
+  customExpandTooltip?: string;
 }
 
 export function DashboardCardWrapper({ 
@@ -27,7 +29,9 @@ export function DashboardCardWrapper({
   contentClassName, 
   onNavigate, 
   id,
-  allowExpand = true 
+  allowExpand = true,
+  customExpandIcon,
+  customExpandTooltip
 }: DashboardCardWrapperProps) {
   const handleCardClick = () => {
     if (onNavigate) {
@@ -69,10 +73,10 @@ export function DashboardCardWrapper({
           <button 
             onClick={handleExpandClick} 
             className="p-0 bg-transparent border-none text-[var(--text-muted-color-val)] hover:accent-text" 
-            title={`Expand ${title}`}
-            aria-label={`Expand ${title}`}
+            title={customExpandTooltip || `Expand ${title}`}
+            aria-label={customExpandTooltip || `Expand ${title}`}
           >
-            <ExpandIcon />
+            {customExpandIcon || <ExpandIcon />}
           </button>
         )}
       </div>

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Task, SubTask } from '@/types';
+import { Task } from '@/types';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from '@/lib/utils';

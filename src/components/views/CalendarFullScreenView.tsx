@@ -122,7 +122,7 @@ const EventRecurrenceEditor: React.FC<{
         <SelectContent>
           <SelectItem value="daily">Daily</SelectItem>
           <SelectItem value="weekly">Weekly</SelectItem>
-          <SelectItem value="monthly">Monthly (on start date's day)</SelectItem>
+          <SelectItem value="monthly">Monthly (on start date&apos;s day)</SelectItem>
           <SelectItem value="yearly">Yearly (on start date)</SelectItem>
           <SelectItem value="">Disable Recurrence</SelectItem>
         </SelectContent>
@@ -176,7 +176,7 @@ export function CalendarFullScreenView({
   const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
   const [isPreviewingDescription, setIsPreviewingDescription] = useState(false);
   
-  const resolvedInitialCategoryForForm = useMemo(() => {
+  const resolvedInitialCategoryForForm = useMemo<Category>(() => { // Explicit type argument for useMemo
     console.log('[useMemo resolvedInitialCategoryForForm] Calculating. currentCategory:', currentCategory, 'categories:', categories);
     if (currentCategory !== "All Projects" && categories.includes(currentCategory)) {
         return currentCategory;
@@ -206,20 +206,20 @@ export function CalendarFullScreenView({
   useEffect(() => {
     console.log('[useEffect updateDefaultsForNonForm] Deps changed:', { selectedDate, resolvedInitialCategoryForForm, showEventForm, editingEvent });
     if (!showEventForm && !editingEvent) { // Only run if form is not shown and not editing
-      const newDefaultCategory = resolvedInitialCategoryForForm;
+      // const newDefaultCategory = resolvedInitialCategoryForForm; // Use resolvedInitialCategoryForForm directly
       const newDefaultDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
       
       setFormData(prev => {
-        console.log('[useEffect updateDefaultsForNonForm] Inside setFormData. prev:', prev, 'New defaults:', { newDefaultCategory, newDefaultDate });
+        console.log('[useEffect updateDefaultsForNonForm] Inside setFormData. prev:', prev, 'New defaults:', { resolvedInitialCategoryForForm, newDefaultDate });
         // Only update if the underlying defaults (date from calendar, or project category) changed
-        if (prev.category !== newDefaultCategory || prev.date !== newDefaultDate) {
+        if (prev.category !== resolvedInitialCategoryForForm || prev.date !== newDefaultDate) {
           console.log('[useEffect updateDefaultsForNonForm] Updating formData based on new defaults for non-form state.');
           return { 
             title: '', 
             description: '', 
             recurrenceRule: undefined, 
             time: '12:00', 
-            category: newDefaultCategory, 
+            category: resolvedInitialCategoryForForm, 
             date: newDefaultDate 
           };
         }
@@ -235,17 +235,17 @@ export function CalendarFullScreenView({
     setEditingEvent(null);
     setIsPreviewingDescription(false);
     const newDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-    const initialCategory = resolvedInitialCategoryForForm; // Capture before setting form data
+    // const initialCategory = resolvedInitialCategoryForForm; // Use resolvedInitialCategoryForForm directly
 
     setFormData({ // Set fresh state for a new event
       title: '',
       date: newDate,
       time: '12:00',
-      category: initialCategory, 
+      category: resolvedInitialCategoryForForm, 
       description: '',
       recurrenceRule: undefined, // Explicitly reset recurrenceRule
     });
-    console.log('[handleShowNewEventForm] Called setFormData. New data:', {date: newDate, category: initialCategory, recurrenceRule: undefined });
+    console.log('[handleShowNewEventForm] Called setFormData. New data:', {date: newDate, category: resolvedInitialCategoryForForm, recurrenceRule: undefined });
     setShowEventForm(true);
     console.log('[handleShowNewEventForm] Called setShowEventForm(true)');
   };
@@ -306,7 +306,7 @@ export function CalendarFullScreenView({
       console.log('[handleRecurrenceChange] Recurrence rule is the same, not updating formData.');
       return prevFormData;
     });
-  }, []); // Removed formData from deps, as we use functional update.
+  }, [formData.recurrenceRule]); 
 
   const resetForm = () => {
     console.log('[resetForm] Resetting form.');
@@ -354,8 +354,8 @@ export function CalendarFullScreenView({
   const getNextOccurrence = (event: AppEvent, fromDate: Date): Date | null => {
     if (!event.recurrenceRule) return null;
     const rule = event.recurrenceRule;
-    let baseDate = startOfDay(parseISO(event.date)); 
-    let checkDate = startOfDay(fromDate); 
+    const baseDate = startOfDay(parseISO(event.date)); 
+    const checkDate = startOfDay(fromDate); 
 
     if (rule.endDate && checkDate > startOfDay(parseISO(rule.endDate))) return null;
 
@@ -368,8 +368,8 @@ export function CalendarFullScreenView({
             case 'weekly':
                 currentIterDate = add(baseDate, { weeks: rule.interval * i });
                 if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
-                    let baseDayOfWeek = currentIterDate.getDay();
-                    let targetDayInWeek = rule.daysOfWeek.find(d => d >= baseDayOfWeek);
+                    const baseDayOfWeek = currentIterDate.getDay();
+                    const targetDayInWeek = rule.daysOfWeek.find(d => d >= baseDayOfWeek);
                     if (targetDayInWeek !== undefined) {
                         currentIterDate = add(currentIterDate, { days: targetDayInWeek - baseDayOfWeek });
                     } else { // Target day(s) are in the next week cycle for this iteration
@@ -410,7 +410,8 @@ export function CalendarFullScreenView({
     return null;
   };
 
-  const DayCellContent: DateFormatter = useCallback((day, options) => { 
+  // Removing useCallback for DayCellContent to simplify type inference for the linter
+  const DayCellContent: DateFormatter = (day, options): React.ReactNode => { 
     const dayStart = startOfDay(day);
     let hasBaseEvent = false;
     let hasRecurringInstance = false;
@@ -443,7 +444,7 @@ export function CalendarFullScreenView({
         )}
       </div>
     );
-  }, [events]); 
+  }; // Removed [events] from dependency array as useCallback is removed
   
   const eventsForSelectedDay = selectedDate ? events.flatMap(event => {
     if (!event) return [];

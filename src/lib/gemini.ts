@@ -50,10 +50,10 @@ export interface AiOperation {
     category?: Category;
     message?: string; 
     recurrenceRule?: RecurrenceRule;
-    subTasks?: { text: string }[]; 
-    subTasksToAdd?: { text: string }[]; 
+    subTasks?: Partial<SubTask>[]; 
+    subTasksToAdd?: Partial<SubTask>[]; 
     subTasksToRemove?: string[]; 
-    subTasksToUpdate?: { id: string; text?: string; completed?: boolean }[]; 
+    subTasksToUpdate?: Partial<SubTask>[]; 
   }>;
   error?: string; 
 }
@@ -188,7 +188,7 @@ Ensure any recurrenceRule adheres to the defined structure.
         parsedJson.operations = [];
     }
     
-    const processedOperations: AiOperation[] = parsedJson.operations.map((op: any) => {
+    const processedOperations: AiOperation[] = parsedJson.operations.map((op: AiOperation) => {
         let { action, payload } = op;
         if (!action || typeof action !== 'string' || !["addTask", "addNote", "addGoal", "addEvent", "updateTask", "unknown"].includes(action)) {
             console.warn(`[Gemini Warning] Invalid action type received: ${action}. Defaulting to 'unknown'.`);
@@ -208,7 +208,7 @@ Ensure any recurrenceRule adheres to the defined structure.
             try {
                 const parsedDate = parseISO(payload.dueDate as string);
                 payload.dueDate = isValid(parsedDate) ? format(parsedDate, 'yyyy-MM-dd') : undefined;
-            } catch (e) { payload.dueDate = undefined; }
+            } catch { payload.dueDate = undefined; }
         }
         if (action === "addEvent" && payload.date) {
             try {
@@ -217,13 +217,13 @@ Ensure any recurrenceRule adheres to the defined structure.
                     parsedEventDate = parseISO(`${payload.date}T12:00:00.000Z`);
                 }
                 payload.date = isValid(parsedEventDate) ? parsedEventDate.toISOString() : undefined;
-            } catch (e) { payload.date = undefined; }
+            } catch { payload.date = undefined; }
         }
         if (payload.recurrenceRule?.endDate) {
             try {
                 const parsedEndDate = parseISO(payload.recurrenceRule.endDate as string);
                 payload.recurrenceRule.endDate = isValid(parsedEndDate) ? format(parsedEndDate, 'yyyy-MM-dd') : undefined;
-            } catch (e) { if (payload.recurrenceRule) payload.recurrenceRule.endDate = undefined; }
+            } catch { if (payload.recurrenceRule) payload.recurrenceRule.endDate = undefined; }
         }
         
         const operation: AiOperation = { action, payload };

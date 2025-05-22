@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { processWithGemini, generateUserContextSummary, ProcessedGeminiOutput, AiOperation, InteractionMode } from '@/lib/gemini';
-import { Category, Task, Note, Goal, Event as AppEvent, SubTask } from '@/types';
+import { processWithGemini, generateUserContextSummary, ProcessedGeminiOutput, InteractionMode } from '@/lib/gemini';
+import { Category, Task, Note, Goal, Event as AppEvent } from '@/types';
 import { v4 as uuidv4 } from 'uuid';
 import dbConnect from '@/lib/mongodb';
 import TaskModel from '@/models/TaskModel';
@@ -15,11 +15,29 @@ import { ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget'
 const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
 
 async function findTaskByName(userId: string, taskName: string, category?: Category): Promise<Task | null> {
-    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } };
+    const query: { userId: string; text: { $regex: string; $options: string }; category?: Category } = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } };
     if (category && category !== "All Projects") {
         query.category = category;
     }
-    return TaskModel.findOne(query).lean();
+    // Remove .lean() to get a full Mongoose document with virtuals like 'id'
+    // and to ensure timestamps are handled as expected by the 'Task' type if they differ.
+    const taskDoc = await TaskModel.findOne(query);
+    if (taskDoc) {
+        // Manually construct the Task object to ensure type compliance,
+        // especially for createdAt (Date to string) and id.
+        return {
+            id: taskDoc.id, // Mongoose virtual getter
+            userId: taskDoc.userId,
+            text: taskDoc.text,
+            completed: taskDoc.completed,
+            dueDate: taskDoc.dueDate,
+            category: taskDoc.category,
+            recurrenceRule: taskDoc.recurrenceRule,
+            subTasks: taskDoc.subTasks?.map(st => ({ ...st })), // Assuming SubTask type matches
+            createdAt: taskDoc.createdAt?.toISOString(),
+        };
+    }
+    return null;
 }
 
 
@@ -116,7 +134,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ aiMessage: geminiResult.reply || geminiResult.overallError, operations: geminiResult.operations || [], error: geminiResult.overallError, executedOperationsLog: [] }, { status: 422 });
     }
     
-    let executedOperationsInfo: ExecutedOperationInfo[] = [];
+    const executedOperationsInfo: ExecutedOperationInfo[] = [];
     let hasExecutionErrors = false;
     
     if (geminiResult.operations && geminiResult.operations.length > 0) {
@@ -138,7 +156,7 @@ export async function POST(request: NextRequest) {
                     id: uuidv4(), userId: userId, text: operation.payload.text!, completed: false,
                     dueDate: operation.payload.dueDate as string | undefined, category: effectiveCategory as Category,
                     recurrenceRule: operation.payload.recurrenceRule,
-                    subTasks: (operation.payload.subTasks || []).map(st => ({ id: uuidv4(), text: st.text, completed: false })),
+                    subTasks: (operation.payload.subTasks || []).map(st => ({ id: uuidv4(), text: st.text || '', completed: false })),
                     createdAt: new Date().toISOString(),
                     };
                     const createdTask = new TaskModel(newTaskData); await createdTask.save();
@@ -148,12 +166,17 @@ export async function POST(request: NextRequest) {
                 case 'updateTask':
                     let taskToUpdateId = operation.payload.taskIdToUpdate;
                     let taskInstance = null;
-                    if (taskToUpdateId) { taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId }); }
-                    else if (operation.payload.text) { 
-                        taskInstance = await findTaskByName(userId, operation.payload.text, effectiveCategory as Category);
-                        if (taskInstance) taskToUpdateId = taskInstance.id; 
+                    if (taskToUpdateId) { 
+                        taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId }); 
+                    } else if (operation.payload.text) { 
+                        const leanTask = await findTaskByName(userId, operation.payload.text, effectiveCategory as Category);
+                        if (leanTask) {
+                            taskToUpdateId = leanTask.id;
+                            taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId }); // Re-fetch non-lean
+                        }
                     }
-                    if (!taskInstance) throw new Error(`Task '${operation.payload.text || taskToUpdateId || 'Unknown'}' not found.`);
+
+                    if (!taskInstance) throw new Error(`Task '${operation.payload.text || taskToUpdateId || 'Unknown'}' not found for update.`);
                     itemSummary = taskInstance.text.substring(0, 30);
                     let updated = false;
                     if (operation.payload.text !== undefined && operation.payload.text !== taskInstance.text) { taskInstance.text = operation.payload.text; updated = true; }
@@ -161,17 +184,20 @@ export async function POST(request: NextRequest) {
                     if (operation.payload.category !== undefined && operation.payload.category !== taskInstance.category) { taskInstance.category = operation.payload.category as Category; updated = true; }
                     if (operation.payload.completed !== undefined && operation.payload.completed !== taskInstance.completed) { taskInstance.completed = operation.payload.completed; updated = true; }
                     if (operation.payload.recurrenceRule !== undefined) { taskInstance.recurrenceRule = operation.payload.recurrenceRule; updated = true; }
+                    
                     if (operation.payload.subTasksToAdd && operation.payload.subTasksToAdd.length > 0) {
-                        const newSubTasksForExisting = operation.payload.subTasksToAdd.map(st => ({ id: uuidv4(), text: st.text, completed: false }));
+                        const newSubTasksForExisting = operation.payload.subTasksToAdd.map(st => ({ id: uuidv4(), text: st.text || '', completed: st.completed || false }));
                         taskInstance.subTasks = [...(taskInstance.subTasks || []), ...newSubTasksForExisting];
                         updated = true;
                     }
-                     if (operation.payload.subTasks !== undefined) { 
-                        taskInstance.subTasks = operation.payload.subTasks.map(st => ({ id: st.id || uuidv4(), text: st.text, completed: st.completed || false }));
+                     if (operation.payload.subTasks !== undefined) { // This replaces all existing subtasks
+                        taskInstance.subTasks = operation.payload.subTasks.map(st => ({ id: st.id || uuidv4(), text: st.text || '', completed: st.completed || false }));
                         updated = true;
                     }
 
-                    if (updated) await taskInstance.save();
+                    if (updated) {
+                        await taskInstance.save();
+                    }
                     executedOperationsInfo.push({ type: 'Task Updated', summary: itemSummary, success: true, error: updated ? undefined : "No changes applied." });
                     break;
 
@@ -201,7 +227,7 @@ export async function POST(request: NextRequest) {
                 
                 case 'unknown':
                     hasExecutionErrors = true;
-                    executedOperationsInfo.push({ type: 'Unknown Operation', summary: operation.payload.error || 'Could not process.', success: false, error: operation.payload.error });
+                    executedOperationsInfo.push({ type: 'Unknown Operation', summary: operation.error || 'Could not process.', success: false, error: operation.error });
                     break;
                 }
             } catch (opError) {

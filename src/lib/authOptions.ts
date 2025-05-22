@@ -1,9 +1,9 @@
-import { NextAuthOptions, User as NextAuthUser } from 'next-auth';
+import { NextAuthOptions } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
 import dbConnect from '@/lib/mongodb';
-import UserModel, { IUser } from '@/models/UserModel';
+import UserModel from '@/models/UserModel';
 import { AuthenticatedUser } from '@/types'; // Import AuthenticatedUser
-import { v4 as uuidv4 } from 'uuid';
+// import { v4 as uuidv4 } from 'uuid'; // Not used
 
 export const authOptions: NextAuthOptions = {
   providers: [

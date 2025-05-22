@@ -1,7 +1,7 @@
 import React from 'react';
-import { CheckCircle, Brain, Zap, CalendarDays, ListChecks, Target, StickyNote } from 'lucide-react';
+import { Brain, Zap, CalendarDays, ListChecks, Target, StickyNote } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils';
 
 const features = [
   {

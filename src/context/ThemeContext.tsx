@@ -73,7 +73,7 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
     } else {
       root.classList.remove('dark');
     }
-  }, []); // Runs once on mount client-side
+  }, [fontKey, mode, themeKey]); // Runs once on mount client-side, and when these specific deps change
 
 
   // Effect for persisting and applying changes whenever state changes

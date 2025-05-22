@@ -6,18 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea"; 
-import { X, Edit, Trash2, CalendarDays, PlusCircle, Repeat, GripVertical, ListPlus, CircleDot } from 'lucide-react';
+// import { Textarea } from "@/components/ui/textarea"; 
+import { X, Edit, Trash2, CalendarDays, PlusCircle, Repeat, ListPlus, CircleDot } from 'lucide-react'; // GripVertical removed
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'; 
+// import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'; 
 import { format, parseISO, isValid as isValidDateFn } from 'date-fns';
 
 interface TasksViewProps {
   tasks: Task[];
   categories: Category[];
   currentCategory: Category;
-  onAddTask: (taskData: Omit<Task, 'id' | 'completed'>) => void;
+  onAddTask: (taskData: Pick<Task, 'text' | 'category' | 'dueDate' | 'recurrenceRule' | 'subTasks'>) => void; // Already correct
   onToggleTask: (taskId: string, subTaskId?: string) => void;
   onDeleteTask: (taskId: string) => void;
   onUpdateTask: (taskId: string, taskUpdateData: Partial<Omit<Task, 'id'>>) => void;
@@ -38,7 +38,7 @@ const RecurrenceEditor: React.FC<{
 
   useEffect(() => {
     if (type && interval > 0) {
-      const newRule: RecurrenceRule = { type, interval };
+      const newRule: RecurrenceRule = { type: type as RecurrenceRule['type'], interval };
       if (type === 'weekly' && daysOfWeek.length > 0) newRule.daysOfWeek = daysOfWeek;
       if (endDate) newRule.endDate = endDate;
       onChange(newRule);
@@ -76,7 +76,7 @@ const RecurrenceEditor: React.FC<{
         <SelectContent>
           <SelectItem value="daily">Daily</SelectItem>
           <SelectItem value="weekly">Weekly</SelectItem>
-          <SelectItem value="monthly">Monthly (on start date's day)</SelectItem>
+          <SelectItem value="monthly">Monthly (on start date&apos;s day)</SelectItem>
           <SelectItem value="yearly">Yearly (on start date)</SelectItem>
           <SelectItem value="">Disable Recurrence</SelectItem>
         </SelectContent>
@@ -132,7 +132,7 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
 
   const handleAddTask = () => {
     if (newTaskText.trim()) {
-      const taskData: Omit<Task, 'id' | 'completed'> = {
+      const taskData: Pick<Task, 'text' | 'category' | 'dueDate' | 'recurrenceRule' | 'subTasks'> = {
         text: newTaskText.trim(),
         category: newTaskCategory,
         dueDate: newTaskDueDate || undefined,

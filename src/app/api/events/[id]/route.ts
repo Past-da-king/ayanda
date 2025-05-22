@@ -21,7 +21,7 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   try {
     const body: Partial<Omit<AppEvent, 'id' | 'userId'>> & { recurrenceRule?: RecurrenceRule | null } = await request.json();
     
-    const updatePayload: any = { ...body };
+    const updatePayload: Partial<Omit<AppEvent, 'id' | 'userId'>> & { $unset?: { [key: string]: string } } = { ...body };
     if (body.hasOwnProperty('recurrenceRule') && !body.recurrenceRule) {
         updatePayload.$unset = { recurrenceRule: "" };
         delete updatePayload.recurrenceRule;

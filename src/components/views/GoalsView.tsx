@@ -161,8 +161,7 @@ export function GoalsView({ goals, categories, currentCategory, onAddGoal, onUpd
                     </div>
                     <Progress 
                         value={(goal.currentValue / goal.targetValue) * 100} 
-                        className="h-2 bg-[var(--background-color-val)]/70" 
-                        indicatorClassName="bg-[var(--accent-color-val)]" 
+                        className="h-2 bg-[var(--background-color-val)]/70 [&>[data-slot=progress-indicator]]:bg-[var(--accent-color-val)]" 
                     />
                   </div>
                 </>

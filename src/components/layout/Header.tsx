@@ -152,7 +152,7 @@ export function Header() {
               >
                 {isSearchLoading && <p className="p-3 text-sm text-muted-foreground text-center">Searching...</p>}
                 {!isSearchLoading && searchResults.length === 0 && (
-                  <p className="p-3 text-sm text-muted-foreground text-center">No results found for "{searchQuery}".</p>
+                  <p className="p-3 text-sm text-muted-foreground text-center">No results found for &quot;{searchQuery}&quot;.</p>
                 )}
                 {!isSearchLoading && searchResults.map(item => (
                   <div

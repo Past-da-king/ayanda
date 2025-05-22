@@ -1,11 +1,11 @@
 "use client"; 
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { DashboardCardWrapper } from './DashboardCardWrapper';
 import { Calendar as ShadcnCalendar } from "@/components/ui/calendar"; // Renamed to avoid conflict
 import { cn } from '@/lib/utils';
 import { Event as AppEvent } from '@/types';
-import { format, parseISO, startOfDay, addDays, isSameDay } from 'date-fns';
+import { format, parseISO, startOfDay, isSameDay } from 'date-fns'; // Removed addDays
 
 interface CalendarWidgetProps {
   events: AppEvent[];
@@ -18,8 +18,8 @@ const getNextOccurrenceForCalendarDot = (event: AppEvent, day: Date): boolean =>
     }
   
     const rule = event.recurrenceRule;
-    let baseEventDate = startOfDay(parseISO(event.date));
-    let currentDay = startOfDay(day);
+    const baseEventDate = startOfDay(parseISO(event.date));
+    const currentDay = startOfDay(day);
   
     if (baseEventDate > currentDay) return false; // Recurrence hasn't started yet for this day
     if (rule.endDate && currentDay > startOfDay(parseISO(rule.endDate))) return false; // Recurrence ended
@@ -31,7 +31,7 @@ const getNextOccurrenceForCalendarDot = (event: AppEvent, day: Date): boolean =>
       case 'weekly':
         if (!rule.daysOfWeek?.includes(currentDay.getDay())) return false;
         // Check if it's a valid week in the interval
-        const weekDiff = Math.floor((currentDay.getTime() - baseEventDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
+        // const weekDiff = Math.floor((currentDay.getTime() - baseEventDate.getTime()) / (1000 * 60 * 60 * 24 * 7)); // Unused
         // This check is simplified; a full rrule lib would be better for complex weekly intervals
         // For simple "every X weeks on day Y", this might work if baseEventDate was also on day Y.
         // A more robust check needed for "every X weeks" if base date isn't on the target day.

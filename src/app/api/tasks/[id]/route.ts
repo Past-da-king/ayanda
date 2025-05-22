@@ -22,7 +22,7 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   try {
     const body: Partial<Omit<Task, 'id' | 'userId'>> & { subTasks?: Partial<SubTask>[], recurrenceRule?: RecurrenceRule | null } = await request.json();
 
-    const updatePayload: any = { ...body };
+    const updatePayload: Partial<Omit<Task, 'id' | 'userId'>> & { $unset?: { [key: string]: string } } = { ...body };
     
     // Ensure subtasks have IDs and default completion status if not provided
     if (body.subTasks) {

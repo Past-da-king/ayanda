@@ -5,7 +5,7 @@ import { useTheme } from '@/context/ThemeContext';
 import { themes } from '@/lib/themes';
 import { availableFonts } from '@/lib/fonts';
 import { Button } from '@/components/ui/button';
-import { CheckIcon, MoonIcon, SunIcon, PaletteIcon, CaseSensitiveIcon } from 'lucide-react';
+import { CheckIcon, MoonIcon, SunIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import {
   Select,
@@ -16,7 +16,7 @@ import {
 } from "@/components/ui/select";
 
 export function ThemeCustomizer() {
-  const { themeKey, fontKey, mode, setTheme, setFont, toggleMode, currentTheme } = useTheme();
+  const { themeKey, fontKey, mode, setTheme, setFont, toggleMode } = useTheme();
 
   return (
     <div className="p-4 space-y-6 bg-popover text-popover-foreground rounded-md shadow-lg border border-border w-72">

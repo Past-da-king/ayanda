@@ -2,7 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { AyandaLogoIcon } from '@/components/layout/AyandaLogoIcon'; // Ensure path is correct
-import { cn } from '@/lib/utils';
+// import { cn } from '@/lib/utils';
 
 export function HeroSection() {
   return (
