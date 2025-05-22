@@ -237,3 +237,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ aiMessage: 'Failed to process AI command.', error: (error as Error).message, operations:[], executedOperationsLog: [] }, { status: 500 });
   }
 }
+

@@ -34,3 +34,4 @@ const EventModel: Model<IEvent> = mongoose.models.Event || mongoose.model<IEvent
 export default EventModel;
 
 
+

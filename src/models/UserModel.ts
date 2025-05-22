@@ -50,3 +50,4 @@ const UserModel: Model<IUser> = mongoose.models.User || mongoose.model<IUser>('U
 
 export default UserModel;
 
+
