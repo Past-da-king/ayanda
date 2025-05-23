@@ -8,7 +8,7 @@ interface Params {
   id: string;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Params }) {
+export async function PUT(request: NextRequest, { params: paramsPromise }: { params: Promise<Params> }) {
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
   if (!token || !token.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -16,7 +16,9 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   const userIdAuth = token.id as string;
 
   await dbConnect();
+  const params = await paramsPromise; // Await the promise
   const { id } = params;
+
   try {
     const body: Partial<Omit<Note, 'id' | 'userId'>> = await request.json();
     const updateData = {
@@ -34,7 +36,7 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Params }) {
+export async function DELETE(request: NextRequest, { params: paramsPromise }: { params: Promise<Params> }) {
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
   if (!token || !token.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -42,7 +44,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
   const userIdAuth = token.id as string;
 
   await dbConnect();
+  const params = await paramsPromise; // Await the promise
   const { id } = params;
+
   try {
     const deletedNote = await NoteModel.findOneAndDelete({ id: id, userId: userIdAuth });
     if (!deletedNote) {
@@ -54,5 +58,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
     return NextResponse.json({ message: `Failed to delete note ${id}`, error: (error as Error).message }, { status: 500 });
   }
 }
+
 
 

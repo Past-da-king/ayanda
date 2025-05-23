@@ -37,7 +37,7 @@ DEFAULT_IGNORE_PATTERNS = [
     '*.class', '*.jar', '*.war', '*.log', '*.tmp', '*.swp', '*.swo', '.DS_Store',
     'Thumbs.db', '.vscode', '.idea', '*.sublime-project', '*.sublime-workspace',
     '*.zip', '*.tar', '*.gz', '*.rar', 'credentials.*', 'config.local.*',
-    'settings.local.py',"package-lock.json",".next"
+    'settings.local.py',"package-lock.json",".next" , "tsconfig.tsbuildinfo"
 ]
 
 # --- Core Helper Functions (No Changes Here) ---

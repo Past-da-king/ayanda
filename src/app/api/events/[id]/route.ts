@@ -9,7 +9,7 @@ interface Params {
   id: string;
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Params }) {
+export async function PUT(request: NextRequest, { params: paramsPromise }: { params: Promise<Params> }) {  
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
   if (!token || !token.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -17,7 +17,9 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   const userIdAuth = token.id as string;
 
   await dbConnect();
+  const params = await paramsPromise; // Await the promise here
   const { id } = params;
+
   try {
     const body: Partial<Omit<AppEvent, 'id' | 'userId'>> & { recurrenceRule?: RecurrenceRule | null } = await request.json();
     
@@ -41,7 +43,7 @@ export async function PUT(request: NextRequest, { params }: { params: Params }) 
   }
 }
 
-export async function DELETE(request: NextRequest, { params }: { params: Params }) {
+export async function DELETE(request: NextRequest, { params: paramsPromise }: { params: Promise<Params> }) {
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
   if (!token || !token.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
@@ -49,7 +51,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Params 
   const userIdAuth = token.id as string;
 
   await dbConnect();
+  const params = await paramsPromise; // Await the promise here
   const { id } = params;
+
   try {
     const deletedEvent = await EventModel.findOneAndDelete({ id: id, userId: userIdAuth });
     if (!deletedEvent) {

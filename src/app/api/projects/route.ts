@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 import { Category } from '@/types';
 
 // For now, projects (categories) are hardcoded as per the initial setup.
@@ -11,7 +11,7 @@ const initialProjectsData: { id: string, name: Category }[] = [
     { id: 'proj_learning', name: 'Studies' }
 ];
 
-export async function GET(_request: NextRequest) {
+export async function GET() {
   try {
     // In a real scenario, you might fetch these from a 'Categories' collection in MongoDB
     const categories: Category[] = initialProjectsData.map(p => p.name);

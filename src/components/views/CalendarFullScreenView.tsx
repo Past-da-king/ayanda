@@ -11,7 +11,7 @@ import { Event as AppEvent, Category, RecurrenceRule } from '@/types';
 import { cn } from '@/lib/utils';
 import { X, PlusCircle, Edit, Trash2, ChevronLeft, ChevronRight, Repeat, Eye, Pencil } from 'lucide-react';
 import { DateFormatter } from "react-day-picker"; 
-import { format, parseISO, isValid as isValidDate, add, startOfDay } from 'date-fns';
+import { format, parseISO, isValid as isValidDate, add, startOfDay, isSameDay } from 'date-fns';
 import ReactMarkdown from 'react-markdown';
 
 const MarkdownCheatsheet: React.FC = () => (
@@ -34,7 +34,6 @@ const EventRecurrenceEditor: React.FC<{
   onChange: (rule: RecurrenceRule | undefined) => void;
   startDate: string; 
 }> = ({ recurrence, onChange, startDate }) => {
-  console.log('[EventRecurrenceEditor] Rendering/Mounting. Props:', { recurrence, startDate });
   const [type, setType] = useState<RecurrenceRule['type'] | ''>(recurrence?.type || ''); 
   const [interval, setIntervalValue] = useState(recurrence?.interval || 1);
   const [daysOfWeek, setDaysOfWeek] = useState<number[]>(recurrence?.daysOfWeek || []);
@@ -42,21 +41,15 @@ const EventRecurrenceEditor: React.FC<{
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
-  // Initialize state from props only on mount or if prop changes significantly
   useEffect(() => {
-    console.log('[EventRecurrenceEditor] Initializing state from props. Prop recurrence:', recurrence);
     setType(recurrence?.type || '');
     setIntervalValue(recurrence?.interval || 1);
     setDaysOfWeek(recurrence?.daysOfWeek || []);
     setEndDate(recurrence?.endDate || '');
-  }, [recurrence]); // Only re-initialize if the `recurrence` prop itself changes reference or value
+  }, [recurrence]); 
 
   useEffect(() => {
-    console.log('[EventRecurrenceEditor] Rule calculation useEffect triggered. Internal State:', { type, interval, daysOfWeek, endDate, startDate });
-    console.log('[EventRecurrenceEditor] Current prop `recurrence` for comparison:', recurrence);
-
     let newRuleCalculated: RecurrenceRule | undefined = undefined;
-
     if (type && interval > 0) {
         newRuleCalculated = { type, interval };
         if (type === 'weekly') {
@@ -69,42 +62,29 @@ const EventRecurrenceEditor: React.FC<{
         }
         if (endDate && isValidDate(parseISO(endDate))) {
             newRuleCalculated.endDate = endDate;
-        } else if (newRuleCalculated?.endDate) { // Clear it if endDate is now invalid or empty but was set
+        } else if (newRuleCalculated?.endDate) { 
             delete newRuleCalculated.endDate;
         }
     }
-    // If type is empty or interval invalid, newRuleCalculated remains undefined.
-
-    const currentRecurrencePropString = JSON.stringify(recurrence); // Stringify the prop
-    const newCalculatedRuleString = JSON.stringify(newRuleCalculated);
-
-    console.log('[EventRecurrenceEditor] Comparing rules:', { currentRecurrencePropString, newCalculatedRuleString });
-
-    if (newCalculatedRuleString !== currentRecurrencePropString) {
-        console.log('[EventRecurrenceEditor] Calculated rule differs from prop. Calling onChange with:', newRuleCalculated);
+    if (JSON.stringify(newRuleCalculated) !== JSON.stringify(recurrence)) {
         onChange(newRuleCalculated);
-    } else {
-        console.log('[EventRecurrenceEditor] Calculated rule matches prop. Not calling onChange.');
     }
-  }, [type, interval, daysOfWeek, endDate, startDate, recurrence, onChange]); // `recurrence` prop added as dependency
+  }, [type, interval, daysOfWeek, endDate, startDate, recurrence, onChange]);
 
   const handleTypeChangeInternal = (selectedValue: string) => {
-    console.log('[EventRecurrenceEditor] Select type changed to:', selectedValue);
-    if (["daily", "weekly", "monthly", "yearly", ""].includes(selectedValue)) { // Allow "" to clear type
+    if (["daily", "weekly", "monthly", "yearly", ""].includes(selectedValue)) { 
         setType(selectedValue as RecurrenceRule['type'] | '');
     }
   };
 
   const toggleDay = (dayIndex: number) => {
-    console.log('[EventRecurrenceEditor] Toggling day:', dayIndex);
     setDaysOfWeek(prev => {
         const newDays = prev.includes(dayIndex) ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex];
-        console.log('[EventRecurrenceEditor] New daysOfWeek state:', newDays);
         return newDays;
     });
   };
   
-  if (!type && !recurrence) { // Show "Set Recurrence" button only if no type is set AND no recurrence prop exists
+  if (!type && !recurrence) { 
     return <Button variant="outline" size="sm" onClick={() => handleTypeChangeInternal('weekly')} className="w-full input-field text-xs justify-start font-normal"><Repeat className="w-3 h-3 mr-1.5"/>Set Recurrence</Button>
   }
 
@@ -127,7 +107,7 @@ const EventRecurrenceEditor: React.FC<{
           <SelectItem value="">Disable Recurrence</SelectItem>
         </SelectContent>
       </Select>
-      {type && ( // Only show interval, days, end date if a type is selected
+      {type && ( 
         <>
             <Input type="number" min="1" value={interval} onChange={e => setIntervalValue(Math.max(1, parseInt(e.target.value)))} placeholder="Interval" className="input-field text-xs h-8" />
             {type === 'weekly' && (
@@ -168,16 +148,13 @@ interface EventFormData {
 export function CalendarFullScreenView({
   events, categories, currentCategory, onAddEvent, onUpdateEvent, onDeleteEvent, onClose
 }: CalendarFullScreenViewProps) {
-  console.log('[CalendarFullScreenView] Rendering. Props:', { currentCategory, categoriesCount: categories.length, eventsCount: events.length });
-
   const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
   const [viewMonth, setViewMonth] = useState<Date>(new Date());
   const [showEventForm, setShowEventForm] = useState(false);
   const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
   const [isPreviewingDescription, setIsPreviewingDescription] = useState(false);
   
-  const resolvedInitialCategoryForForm = useMemo<Category>(() => { // Explicit type argument for useMemo
-    console.log('[useMemo resolvedInitialCategoryForForm] Calculating. currentCategory:', currentCategory, 'categories:', categories);
+  const resolvedInitialCategoryForForm = useMemo<Category>(() => { 
     if (currentCategory !== "All Projects" && categories.includes(currentCategory)) {
         return currentCategory;
     }
@@ -190,7 +167,6 @@ export function CalendarFullScreenView({
   }, [currentCategory, categories]);
 
   const [formData, setFormData] = useState<EventFormData>(() => {
-    console.log('[useState formData init] resolvedInitialCategoryForForm:', resolvedInitialCategoryForForm);
     return {
         title: '',
         date: format(selectedDate || new Date(), 'yyyy-MM-dd'),
@@ -200,20 +176,12 @@ export function CalendarFullScreenView({
         recurrenceRule: undefined,
     };
   });
-  console.log('[CalendarFullScreenView] Current formData state:', formData, 'showEventForm:', showEventForm);
-
 
   useEffect(() => {
-    console.log('[useEffect updateDefaultsForNonForm] Deps changed:', { selectedDate, resolvedInitialCategoryForForm, showEventForm, editingEvent });
-    if (!showEventForm && !editingEvent) { // Only run if form is not shown and not editing
-      // const newDefaultCategory = resolvedInitialCategoryForForm; // Use resolvedInitialCategoryForForm directly
+    if (!showEventForm && !editingEvent) { 
       const newDefaultDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-      
       setFormData(prev => {
-        console.log('[useEffect updateDefaultsForNonForm] Inside setFormData. prev:', prev, 'New defaults:', { resolvedInitialCategoryForForm, newDefaultDate });
-        // Only update if the underlying defaults (date from calendar, or project category) changed
         if (prev.category !== resolvedInitialCategoryForForm || prev.date !== newDefaultDate) {
-          console.log('[useEffect updateDefaultsForNonForm] Updating formData based on new defaults for non-form state.');
           return { 
             title: '', 
             description: '', 
@@ -223,7 +191,6 @@ export function CalendarFullScreenView({
             date: newDefaultDate 
           };
         }
-        console.log('[useEffect updateDefaultsForNonForm] formData matches new defaults, not updating.');
         return prev; 
       });
     }
@@ -231,85 +198,69 @@ export function CalendarFullScreenView({
 
 
   const handleShowNewEventForm = () => {
-    console.log('[handleShowNewEventForm] Clicked. Current selectedDate:', selectedDate, 'resolvedInitialCategoryForForm:', resolvedInitialCategoryForForm);
     setEditingEvent(null);
     setIsPreviewingDescription(false);
     const newDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-    // const initialCategory = resolvedInitialCategoryForForm; // Use resolvedInitialCategoryForForm directly
-
-    setFormData({ // Set fresh state for a new event
+    setFormData({ 
       title: '',
       date: newDate,
       time: '12:00',
       category: resolvedInitialCategoryForForm, 
       description: '',
-      recurrenceRule: undefined, // Explicitly reset recurrenceRule
+      recurrenceRule: undefined, 
     });
-    console.log('[handleShowNewEventForm] Called setFormData. New data:', {date: newDate, category: resolvedInitialCategoryForForm, recurrenceRule: undefined });
     setShowEventForm(true);
-    console.log('[handleShowNewEventForm] Called setShowEventForm(true)');
   };
 
   useEffect(() => {
-    console.log('[useEffect editingEvent] editingEvent changed:', editingEvent);
     if (editingEvent) {
       const eventDateObj = parseISO(editingEvent.date);
+      const isValidSpecificCategory = categories.includes(editingEvent.category as Category);
+      const categoryToSetForForm: Category = isValidSpecificCategory
+        ? editingEvent.category as Category 
+        : resolvedInitialCategoryForForm;  
+
       setFormData({
         title: editingEvent.title,
         date: format(eventDateObj, 'yyyy-MM-dd'),
         time: format(eventDateObj, 'HH:mm'),
-        category: editingEvent.category, 
+        category: categoryToSetForForm, 
         description: editingEvent.description || '',
-        recurrenceRule: editingEvent.recurrenceRule, // Load existing recurrenceRule
+        recurrenceRule: editingEvent.recurrenceRule, 
       });
       setShowEventForm(true);
       setIsPreviewingDescription(false);
-      console.log('[useEffect editingEvent] Set formData for editing and showed form. RecurrenceRule:', editingEvent.recurrenceRule);
     }
-  }, [editingEvent]);
+  }, [editingEvent, categories, resolvedInitialCategoryForForm]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
-    console.log('[handleInputChange]', { name, value });
     setFormData(prev => ({ ...prev, [name]: value }));
   };
   
   const handleCategoryChange = useCallback((newCategoryValue: string) => {
-    console.log('[handleCategoryChange] Received newCategoryValue:', newCategoryValue);
     setFormData(prevFormData => {
-      console.log('[handleCategoryChange] Inside setFormData. prevFormData.category:', prevFormData.category, 'newCategoryValue:', newCategoryValue);
       if (newCategoryValue !== prevFormData.category) {
         const foundCategory = categories.find(cat => cat === newCategoryValue);
         if (foundCategory) {
-          console.log('[handleCategoryChange] Category changing. Updating formData.');
           return { ...prevFormData, category: foundCategory };
-        } else {
-          console.warn('[handleCategoryChange] New category value not found in available categories:', newCategoryValue);
-          return prevFormData; 
         }
+        return prevFormData; 
       }
-      console.log('[handleCategoryChange] Category is the same, not updating formData.');
       return prevFormData; 
     });
   }, [categories]); 
 
   const handleRecurrenceChange = useCallback((newRule: RecurrenceRule | undefined) => {
-    console.log('[handleRecurrenceChange] Received newRule:', newRule, 'Current formData.recurrenceRule:', formData.recurrenceRule);
     setFormData(prevFormData => {
-      const prevRuleString = JSON.stringify(prevFormData.recurrenceRule);
-      const newRuleString = JSON.stringify(newRule);
-      console.log('[handleRecurrenceChange] Inside setFormData. Comparing rules:', { prevRuleString, newRuleString });
-      if (newRuleString !== prevRuleString) {
-        console.log('[handleRecurrenceChange] Recurrence rule is different. Updating formData.');
+      if (JSON.stringify(newRule) !== JSON.stringify(prevFormData.recurrenceRule)) {
         return { ...prevFormData, recurrenceRule: newRule };
       }
-      console.log('[handleRecurrenceChange] Recurrence rule is the same, not updating formData.');
       return prevFormData;
     });
-  }, [formData.recurrenceRule]); 
+  }, []); 
 
   const resetForm = () => {
-    console.log('[resetForm] Resetting form.');
     setShowEventForm(false);
     setEditingEvent(null);
     setIsPreviewingDescription(false);
@@ -322,17 +273,13 @@ export function CalendarFullScreenView({
       description: '',
       recurrenceRule: undefined,
     });
-    console.log('[resetForm] Form reset with date:', newDate, 'category:', resolvedInitialCategoryForForm);
   };
 
   const handleSubmitEvent = () => {
-    console.log('[handleSubmitEvent] Submitting event. formData:', formData);
     if (!formData.title || !formData.date || !formData.time) {
-        console.warn('[handleSubmitEvent] Form validation failed: title, date, or time missing.');
         return;
     }
     const dateTimeString = `${formData.date}T${formData.time}:00.000Z`; 
-    
     const eventDataSubmit = {
         title: formData.title,
         date: dateTimeString,
@@ -340,12 +287,9 @@ export function CalendarFullScreenView({
         description: formData.description,
         recurrenceRule: formData.recurrenceRule,
     };
-
     if (editingEvent) {
-      console.log('[handleSubmitEvent] Updating event ID:', editingEvent.id);
       onUpdateEvent(editingEvent.id, eventDataSubmit);
     } else {
-      console.log('[handleSubmitEvent] Adding new event.');
       onAddEvent(eventDataSubmit);
     }
     resetForm();
@@ -372,28 +316,25 @@ export function CalendarFullScreenView({
                     const targetDayInWeek = rule.daysOfWeek.find(d => d >= baseDayOfWeek);
                     if (targetDayInWeek !== undefined) {
                         currentIterDate = add(currentIterDate, { days: targetDayInWeek - baseDayOfWeek });
-                    } else { // Target day(s) are in the next week cycle for this iteration
-                        currentIterDate = add(baseDate, { weeks: rule.interval * (i + 1) }); // Move to the start of next interval
-                        // Then find the first dayOfWeek in that new week
+                    } else { 
+                        currentIterDate = add(baseDate, { weeks: rule.interval * (i + 1) }); 
                         currentIterDate = add(currentIterDate, { days: rule.daysOfWeek[0] - currentIterDate.getDay() }); 
                     }
                 }
                 break;
             case 'monthly': 
                 currentIterDate = add(baseDate, { months: rule.interval * i}); 
-                // Adjust day if it exceeds the number of days in the target month
                 if (currentIterDate.getDate() !== baseDate.getDate()) { 
                     const lastDayOfMonth = new Date(currentIterDate.getFullYear(), currentIterDate.getMonth() + 1, 0).getDate();
-                    if (baseDate.getDate() > lastDayOfMonth) { // Original day is e.g. 31st, but current month only has 30
+                    if (baseDate.getDate() > lastDayOfMonth) { 
                         currentIterDate.setDate(lastDayOfMonth);
-                    } else { // Original day is valid for current month (e.g. 15th)
+                    } else { 
                          currentIterDate.setDate(baseDate.getDate());
                     }
                 }
                 break;
             case 'yearly': 
                 currentIterDate = add(baseDate, { years: rule.interval * i}); 
-                // Ensure month and day are consistent if Feb 29 is involved.
                 if (currentIterDate.getMonth() !== baseDate.getMonth() || currentIterDate.getDate() !== baseDate.getDate()) {
                     currentIterDate = new Date(currentIterDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
                 }
@@ -409,72 +350,57 @@ export function CalendarFullScreenView({
     }
     return null;
   };
-
-  // Removing useCallback for DayCellContent to simplify type inference for the linter
-  const DayCellContent: DateFormatter = (day, options): React.ReactNode => { 
+  
+  // Helper to get events for a specific day (used by DayCellContent)
+  const getEventsForDay = (day: Date): AppEvent[] => {
     const dayStart = startOfDay(day);
-    let hasBaseEvent = false;
-    let hasRecurringInstance = false;
+    return events.flatMap(event => {
+      if (!event) return [];
+      const eventBaseDate = startOfDay(parseISO(event.date));
+      const results: AppEvent[] = [];
+      if (isSameDay(eventBaseDate, dayStart)) {
+        results.push(event);
+      }
+      if (event.recurrenceRule) {
+        const next = getNextOccurrence(event, dayStart);
+        if (next && isSameDay(next, dayStart) && !isSameDay(eventBaseDate, dayStart)) {
+          results.push({
+            ...event,
+            date: format(dayStart, 'yyyy-MM-dd') + 'T' + format(parseISO(event.date), 'HH:mm:ss.SSS') + 'Z',
+          });
+        }
+      }
+      return results;
+    }).filter((event, index, self) => index === self.findIndex((e) => e.id === event.id && e.date === event.date));
+  };
 
-    events.forEach(event => {
-        if (!event) return;
-        const eventBaseDate = startOfDay(parseISO(event.date));
-        if (eventBaseDate.getTime() === dayStart.getTime()) {
-            hasBaseEvent = true;
-        }
-        if (event.recurrenceRule) {
-            // Check occurrences on or after the day itself, but only up to the day to avoid future dots.
-            const next = getNextOccurrence(event, dayStart); 
-            if (next && startOfDay(next).getTime() === dayStart.getTime()) {
-                hasRecurringInstance = true;
-            }
-        }
-    });
+
+  const DayCellContent: DateFormatter = (day, options): React.ReactNode => { 
+    const dayEvents = getEventsForDay(day);
+    const hasEvent = dayEvents.length > 0;
+    const firstEventTitle = hasEvent ? dayEvents[0].title : '';
 
     return (
-      <div className="relative w-full h-full flex items-center justify-center">
-        {format(day, "d", { locale: options?.locale })} 
-        {(hasBaseEvent || hasRecurringInstance) && (
+      <div className="relative w-full h-full flex flex-col items-center justify-start pt-1 overflow-hidden">
+        <span className={cn("text-xs", hasEvent && "font-semibold text-base mb-0.5")}>
+            {format(day, "d", { locale: options?.locale })}
+        </span>
+        {hasEvent && (
+          <span className="text-[10px] leading-tight text-primary truncate w-full px-1 text-center">
+            {firstEventTitle}
+          </span>
+        )}
+        {hasEvent && (
           <span className={cn(
-              "absolute bottom-1.5 left-1/2 -translate-x-1/2 size-1.5 rounded-full",
-              hasBaseEvent && hasRecurringInstance ? "bg-gradient-to-r from-primary to-destructive" :
-              hasBaseEvent ? "bg-primary" : 
-              hasRecurringInstance ? "bg-primary/50" : "" // Ensure it's actually there
+              "absolute bottom-1 left-1/2 -translate-x-1/2 size-1.5 rounded-full bg-primary opacity-70"
           )} />
         )}
       </div>
     );
-  }; // Removed [events] from dependency array as useCallback is removed
+  }; 
   
-  const eventsForSelectedDay = selectedDate ? events.flatMap(event => {
-    if (!event) return [];
-    const eventDateObj = parseISO(event.date);
-    const selectedDayStart = startOfDay(selectedDate);
-    const eventDayStart = startOfDay(eventDateObj);
-    
-    const results: AppEvent[] = [];
-    // Add if it's a base event on this day
-    if (eventDayStart.getTime() === selectedDayStart.getTime()) {
-        results.push(event); 
-    }
-    
-    // Add if it's a recurring instance on this day
-    if (event.recurrenceRule) {
-        const next = getNextOccurrence(event, selectedDayStart); // Check for occurrence ON selectedDayStart
-        if (next && startOfDay(next).getTime() === selectedDayStart.getTime()) {
-            // Avoid duplicating if the base event is also the recurring instance
-            if (eventDayStart.getTime() !== selectedDayStart.getTime()) { 
-                results.push({
-                    ...event, // Original ID and recurrence rule
-                    date: format(selectedDate, 'yyyy-MM-dd') + 'T' + format(eventDateObj, 'HH:mm:ss.SSS') + 'Z', // Date of this instance
-                });
-            }
-        }
-    }
-    return results;
-
-  }).filter((event, index, self) => index === self.findIndex((e) => e.id === event.id && e.date === event.date)) // Deduplicate
-  .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
+  const eventsForSelectedDay = selectedDate ? getEventsForDay(selectedDate)
+    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
 
 
   return (
@@ -495,19 +421,17 @@ export function CalendarFullScreenView({
                     mode="single"
                     selected={selectedDate}
                     onSelect={(day) => {
-                        console.log('[Calendar onSelect] Day selected:', day);
                         setSelectedDate(day);
                     }}
                     month={viewMonth}
                     onMonthChange={(month) => {
-                        console.log('[Calendar onMonthChange] Month changed to:', month);
                         setViewMonth(month);
                     }}
-                    className="w-full max-w-2xl" 
+                    className="w-full" 
                     classNames={{
                         root: "w-full", 
                         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
-                        month: "space-y-4",
+                        month: "space-y-4 w-full",
                         caption: "flex justify-center pt-1 relative items-center h-10 mb-2",
                         caption_label: "text-xl font-orbitron accent-text",
                         nav: "space-x-1 flex items-center",
@@ -522,12 +446,19 @@ export function CalendarFullScreenView({
                         head_row: "flex w-full mb-1",
                         head_cell: "text-muted-foreground rounded-md w-[14.28%] text-xs font-medium p-1 h-8 justify-center",
                         row: "flex w-full mt-2",
-                        cell: "text-center text-sm p-0 relative w-[14.28%] h-16 sm:h-20 focus-within:relative focus-within:z-20",
+                        cell: cn(
+                            "text-center text-sm p-0 relative w-[14.28%] h-20 sm:h-24 focus-within:relative focus-within:z-20", // Increased height
+                            // The following line seems to have a conditional class application. Let's ensure it's correct.
+                            // If you intend 'day_selected' to always have rounded-md, it should be part of its own class definition.
+                            // This line seems to be about range selection, which is not the primary mode here.
+                            // For single select, `day_selected` will handle its own rounding.
+                            // "[&:has([aria-selected].day-outside)]:bg-accent/50", 
+                        ),
                         day: cn(
                             "w-full h-full p-0 font-normal rounded-md",
                             "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                            "transition-colors"
+                            "transition-colors flex flex-col items-center justify-start" // Align content top
                         ),
                         day_selected: "bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary focus:text-primary-foreground",
                         day_today: "bg-accent text-accent-foreground ring-1 ring-primary/60",
@@ -557,7 +488,6 @@ export function CalendarFullScreenView({
                             <Input name="date" type="date" value={formData.date} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
                             <Input name="time" type="time" value={formData.time} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
                         </div>
-                        {console.log('[Select render] Value being passed to Select:', formData.category, 'Available categories for dropdown:', categories)}
                         <Select name="category" value={formData.category} onValueChange={handleCategoryChange} disabled={isPreviewingDescription}>
                             <SelectTrigger className="input-field"><SelectValue placeholder="Category" /></SelectTrigger>
                             <SelectContent className="bg-widget-background border-border-main">
@@ -622,8 +552,7 @@ export function CalendarFullScreenView({
                                             </div>
                                             <div className="flex gap-1 shrink-0">
                                                 <Button variant="ghost" size="icon" onClick={() => { 
-                                                    console.log('[Edit Button Click] Setting editingEvent for ID:', event.id);
-                                                    const originalEvent = events.find(e => e.id === event.id); // Find the original to get full recurrenceRule if it's a projected instance
+                                                    const originalEvent = events.find(e => e.id === event.id); 
                                                     setEditingEvent(originalEvent || event);
                                                 }} className="btn-icon w-6 h-6"><Edit className="w-3.5 h-3.5"/></Button>
                                                 <Button variant="ghost" size="icon" onClick={() => onDeleteEvent(event.id)} className="btn-icon danger w-6 h-6"><Trash2 className="w-3.5 h-3.5"/></Button>
@@ -650,3 +579,4 @@ export function CalendarFullScreenView({
     </div>
   );
 }
+

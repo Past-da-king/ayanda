@@ -1,821 +1,587 @@
 
 
-## src/app/page.tsx
-
+## src/components/views/CalendarFullScreenView.tsx
 ```typescript
-"use client";
+"use client"; 
 
-import React, { useState, useEffect, useCallback } from 'react';
-import { useSession } from 'next-auth/react'; 
-import { usePathname, useRouter, useSearchParams } from 'next/navigation'; 
-
-import { Header } from '@/components/layout/Header';
-import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar';
-import { FooterChat } from '@/components/layout/FooterChat';
-import { AiAssistantWidget, ExecutedOperationInfo, AiChatMessage as AiChatMessageImport } from '@/components/dashboard/AiAssistantWidget';
-import { TasksWidget } from '@/components/dashboard/TasksWidget';
-import { CalendarWidget } from '@/components/dashboard/CalendarWidget';
-import { GoalsWidget } from '@/components/dashboard/GoalsWidget';
-import { QuickNotesWidget } from '@/components/dashboard/QuickNotesWidget';
-import { DueSoonWidget } from '@/components/dashboard/DueSoonWidget';
-import { TasksView } from '@/components/views/TasksView';
-import { GoalsView } from '@/components/views/GoalsView';
-import { NotesView } from '@/components/views/NotesView';
-import { CalendarFullScreenView } from '@/components/views/CalendarFullScreenView';
-import { Task, Goal, Note, Event as AppEvent, ViewMode, Category, RecurrenceRule, SubTask } from '@/types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Calendar } from "@/components/ui/calendar";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Event as AppEvent, Category, RecurrenceRule } from '@/types';
 import { cn } from '@/lib/utils';
-import { v4 as uuidv4 } from 'uuid';
-import type { Part, Content } from '@google/generative-ai';
-import type { InteractionMode } from '@/lib/gemini';
+import { X, PlusCircle, Edit, Trash2, ChevronLeft, ChevronRight, Repeat, Eye, Pencil } from 'lucide-react';
+import { DateFormatter } from "react-day-picker"; 
+import { format, parseISO, isValid as isValidDate, add, startOfDay, isSameDay } from 'date-fns';
+import ReactMarkdown from 'react-markdown';
 
-const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
-const availableCategoriesForDropdown: Category[] = ["All Projects", ...baseAvailableCategories];
+const MarkdownCheatsheet: React.FC = () => (
+  <div className="p-3 text-xs space-y-1 text-muted-foreground bg-popover border border-border rounded-md shadow-md w-64">
+    <p><strong># H1</strong>, <strong>## H2</strong>, <strong>### H3</strong></p>
+    <p><strong>**bold**</strong> or __bold__</p>
+    <p><em>*italic*</em> or _italic_</p>
+    <p>~<sub>~</sub>Strikethrough~<sub>~</sub></p>
+    <p>Unordered List: <br />- Item 1<br />- Item 2</p>
+    <p>Ordered List: <br />1. Item 1<br />2. Item 2</p>
+    <p>Checklist: <br />- [ ] To do<br />- [x] Done</p>
+    <p>[Link Text](https://url.com)</p>
+    <p>`Inline code`</p>
+    <p>```<br />Code block<br />```</p>
+  </div>
+);
 
-type AiChatMessage = AiChatMessageImport;
+const EventRecurrenceEditor: React.FC<{
+  recurrence: RecurrenceRule | undefined;
+  onChange: (rule: RecurrenceRule | undefined) => void;
+  startDate: string; 
+}> = ({ recurrence, onChange, startDate }) => {
+  const [type, setType] = useState<RecurrenceRule['type'] | ''>(recurrence?.type || ''); 
+  const [interval, setIntervalValue] = useState(recurrence?.interval || 1);
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(recurrence?.daysOfWeek || []);
+  const [endDate, setEndDate] = useState(recurrence?.endDate || '');
 
-export default function HomePage() {
-  const { data: session, status } = useSession();
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
-
-  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
-  
-  const [tasks, setTasks] = useState<Task[]>([]);
-  const [goals, setGoals] = useState<Goal[]>([]);
-  const [notes, setNotes] = useState<Note[]>([]);
-  const [events, setEvents] = useState<AppEvent[]>([]);
-  
-  const [currentCategory, setCurrentCategory] = useState<Category>("All Projects");
-
-  const [isLoading, setIsLoading] = useState(true); 
-  const [isProcessingAi, setIsProcessingAi] = useState(false);
-  const [initialLoadDone, setInitialLoadDone] = useState(false);
-  const [aiMessageForCollapsedWidget, setAiMessageForCollapsedWidget] = useState<string | null>(null);
-
-  const [isAiChatModeActive, setIsAiChatModeActive] = useState(false);
-  const [aiChatHistory, setAiChatHistory] = useState<AiChatMessage[]>([]);
-  const [currentFooterChatMessage, setCurrentFooterChatMessage] = useState('');
-
-  useEffect(() => {
-    const view = searchParams.get('view') as ViewMode | null;
-    if (view && ['tasks', 'goals', 'notes', 'calendar'].includes(view)) {
-      setViewMode(view);
-    }
-  }, [searchParams]);
+  const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   useEffect(() => {
-    if (status === "loading") return; 
-    if (!session && status === "unauthenticated") {
-      router.replace(`/login?callbackUrl=${pathname}`); 
-    } else if (session && status === "authenticated" && !initialLoadDone) {
-      setInitialLoadDone(true); 
-    }
-  }, [session, status, router, initialLoadDone, pathname]);
-
-  const fetchData = useCallback(async (categorySignal?: Category) => {
-    if (status !== "authenticated") return; 
-    
-    setIsLoading(true);
-    const categoryToFetch = categorySignal || currentCategory;
-    const queryCategory = categoryToFetch === "All Projects" ? "" : `?category=${encodeURIComponent(categoryToFetch)}`;
-    
-    try {
-      const [tasksRes, goalsRes, notesRes, eventsRes] = await Promise.all([
-        fetch(`/api/tasks${queryCategory}`),
-        fetch(`/api/goals${queryCategory}`),
-        fetch(`/api/notes${queryCategory}`),
-        fetch(`/api/events${queryCategory}`),
-      ]);
-
-      const checkOk = (res: Response, name: string) => {
-          if(!res.ok) console.error(`Failed to fetch ${name}: ${res.status} ${res.statusText} - ${res.url}`);
-          return res.ok;
-      }
-      
-      if (checkOk(tasksRes, 'tasks') && checkOk(goalsRes, 'goals') && checkOk(notesRes, 'notes') && checkOk(eventsRes, 'events')) {
-        const tasksData = await tasksRes.json();
-        const goalsData = await goalsRes.json();
-        const notesData = await notesRes.json();
-        const eventsData = await eventsRes.json();
-
-        setTasks(tasksData);
-        setGoals(goalsData);
-        setNotes(notesData);
-        setEvents(eventsData);
-      } else {
-         setAiMessageForCollapsedWidget("Error fetching some data. Dashboard might be incomplete.");
-      }
-    } catch (error) {
-      console.error('Error fetching data:', error);
-      setAiMessageForCollapsedWidget("Network error fetching data.");
-    } finally {
-      setIsLoading(false);
-    }
-  }, [currentCategory, status]); 
+    setType(recurrence?.type || '');
+    setIntervalValue(recurrence?.interval || 1);
+    setDaysOfWeek(recurrence?.daysOfWeek || []);
+    setEndDate(recurrence?.endDate || '');
+  }, [recurrence]); 
 
   useEffect(() => {
-    if (initialLoadDone && status === "authenticated") { 
-        fetchData();
-    }
-  }, [fetchData, initialLoadDone, status]); 
-
-  const sendAiRequest = useCallback(async (
-    messageParts: Part[], 
-    currentChatSessionHistoryForRequest: AiChatMessage[], // Use a temporary variable for history being sent
-    mode: InteractionMode
-  ) => {
-    if (status !== "authenticated") return;
-    setIsProcessingAi(true);
-    
-    const formattedHistoryForApi: Content[] = currentChatSessionHistoryForRequest
-      .filter(chat => !chat.isAudioPlaceholder) // Don't send audio placeholders to Gemini
-      .map(chat => ({
-        role: chat.sender === 'user' ? 'user' : 'model',
-        parts: [{ text: chat.message }]
-    }));
-
-    try {
-        const res = await fetch('/api/ai', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                parts: messageParts, 
-                currentCategory,
-                chatHistory: mode === 'chatSession' ? formattedHistoryForApi : undefined, 
-                interactionMode: mode,
-            }),
-        });
-        
-        const result: { aiMessage: string; executedOperationsLog?: ExecutedOperationInfo[]; error?: string } = await res.json();
-        
-        // Before adding the new AI message, remove any "Audio sent..." placeholders from the current user
-        setAiChatHistory(prev => prev.filter(m => !(m.sender === 'user' && m.isAudioPlaceholder)));
-
-        if (res.ok && result.aiMessage) {
-            const aiReplyMessage: AiChatMessage = {
-                sender: 'ai',
-                message: result.aiMessage,
-                timestamp: new Date(),
-                executedOps: result.executedOperationsLog 
-            };
-
-            if (mode === 'chatSession') {
-                setAiChatHistory(prev => [...prev, aiReplyMessage]);
-                if (result.executedOperationsLog && result.executedOperationsLog.some(op => op.success)) {
-                    fetchData(currentCategory); 
-                }
-            } else { 
-                setAiMessageForCollapsedWidget(result.aiMessage);
-                if (result.executedOperationsLog && result.executedOperationsLog.some(op => op.success)) {
-                    fetchData(currentCategory);
-                }
-            }
-        } else {
-            const errorMessage = result.aiMessage || result.error || "AIDA had trouble responding.";
-            if(mode === 'chatSession') {
-                setAiChatHistory(prev => [...prev, { sender: 'ai', message: `Error: ${errorMessage}`, timestamp: new Date() }]);
-            } else {
-                setAiMessageForCollapsedWidget(`Error: ${errorMessage}`);
+    let newRuleCalculated: RecurrenceRule | undefined = undefined;
+    if (type && interval > 0) {
+        newRuleCalculated = { type, interval };
+        if (type === 'weekly') {
+            if (daysOfWeek.length > 0) {
+                newRuleCalculated.daysOfWeek = [...daysOfWeek].sort((a, b) => a - b);
+            } else if (startDate && isValidDate(parseISO(startDate))) {
+                const startDay = parseISO(startDate + 'T00:00:00Z').getDay();
+                newRuleCalculated.daysOfWeek = [startDay];
             }
         }
-    } catch (error) {
-        console.error("Error sending command to AI:", error);
-        const connectError = "Sorry, I couldn't connect. Please try again.";
-        setAiChatHistory(prev => prev.filter(m => !(m.sender === 'user' && m.isAudioPlaceholder)));
-         if(mode === 'chatSession') {
-            setAiChatHistory(prev => [...prev, { sender: 'ai', message: connectError, timestamp: new Date() }]);
-        } else {
-            setAiMessageForCollapsedWidget(connectError);
+        if (endDate && isValidDate(parseISO(endDate))) {
+            newRuleCalculated.endDate = endDate;
+        } else if (newRuleCalculated?.endDate) { 
+            delete newRuleCalculated.endDate;
         }
-    } finally {
-        setIsProcessingAi(false);
     }
-  }, [status, currentCategory, fetchData]);
-
-
-  const handleToggleAiChatMode = useCallback(async () => {
-    const wasChatModeActive = isAiChatModeActive;
-    const currentSessionHistoryForSummary = [...aiChatHistory]; 
-
-    setIsAiChatModeActive(prev => !prev); 
-
-    if (wasChatModeActive && currentSessionHistoryForSummary.length > 0) { 
-        setIsProcessingAi(true);
-        setAiMessageForCollapsedWidget("Finalizing chat with AIDA...");
-        try {
-            const formattedHistoryForSummary: Content[] = currentSessionHistoryForSummary
-                .filter(chat => !chat.isAudioPlaceholder) 
-                .map(chat => ({
-                    role: chat.sender === 'user' ? 'user' : 'model',
-                    parts: [{ text: chat.message }]
-            }));
-
-            if (formattedHistoryForSummary.length > 0) {
-                await fetch('/api/ai', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    chatHistory: formattedHistoryForSummary, 
-                    isEndingChatSession: true,
-                    currentCategory: currentCategory, 
-                    interactionMode: 'chatSession' 
-                }),
-                });
-                setAiMessageForCollapsedWidget("Chat session concluded. Context updated.");
-            } else {
-                setAiMessageForCollapsedWidget("Chat session ended.");
-            }
-        } catch (error) {
-            console.error("Error finalizing chat session for summary:", error);
-            setAiMessageForCollapsedWidget("Error ending chat session.");
-        } finally {
-            setIsProcessingAi(false);
-        }
-        setAiChatHistory([]); 
+    if (JSON.stringify(newRuleCalculated) !== JSON.stringify(recurrence)) {
+        onChange(newRuleCalculated);
     }
-    
-    if (!wasChatModeActive) { 
-        setAiMessageForCollapsedWidget(null);
-        setCurrentFooterChatMessage(''); 
-        // Send an empty 'parts' array to trigger initial greeting with context
-        sendAiRequest([], [], 'chatSession'); 
-    } else { 
-        setCurrentFooterChatMessage(''); 
-    }
-  }, [isAiChatModeActive, aiChatHistory, currentCategory, sendAiRequest]);
+  }, [type, interval, daysOfWeek, endDate, startDate, recurrence, onChange]);
 
-
-  const handleCommandFromFooter = (command: string) => {
-    if (!command.trim()) return;
-    const commandParts: Part[] = [{ text: command.trim() }];
-    
-    if (isAiChatModeActive) {
-        const newUserMessage: AiChatMessage = { sender: 'user', message: command.trim(), timestamp: new Date() };
-        // Add user message to history immediately for responsive UI
-        setAiChatHistory(prev => [...prev, newUserMessage]);
-        // Pass the new state of aiChatHistory to sendAiRequest
-        sendAiRequest(commandParts, [...aiChatHistory, newUserMessage], 'chatSession');
-    } else {
-        setAiMessageForCollapsedWidget(null);
-        sendAiRequest(commandParts, [], 'quickCommand');
+  const handleTypeChangeInternal = (selectedValue: string) => {
+    if (["daily", "weekly", "monthly", "yearly", ""].includes(selectedValue)) { 
+        setType(selectedValue as RecurrenceRule['type'] | '');
     }
   };
 
-  const handleAudioCommandFromFooter = (audioBase64: string, mimeType: string) => {
-    const audioPart: Part = { inlineData: { mimeType, data: audioBase64 } };
-    const instructionPart: Part = { text: "This is an audio command. Please process it." };
-    const messageParts = [audioPart, instructionPart];
-    
-    const audioPlaceholderMessage: AiChatMessage = { 
-        sender: 'user', // Visually group with user actions
-        message: "🎤 Audio input sent...", 
-        timestamp: new Date(),
-        isAudioPlaceholder: true 
-    };
-
-    if (isAiChatModeActive) {
-        setAiChatHistory(prev => [...prev, audioPlaceholderMessage]);
-        sendAiRequest(messageParts, [...aiChatHistory, audioPlaceholderMessage], 'chatSession');
-    } else {
-        setAiMessageForCollapsedWidget("Processing audio command..."); // Or a more subtle indicator
-        sendAiRequest(messageParts, [], 'quickCommand');
-    }
-  };
-
-  const handleCrudFeedback = (message: string, mode: 'success' | 'error') => {
-    const feedbackMessage = `${mode === 'error' ? 'Error: ' : ''}${message}`;
-    if (isAiChatModeActive) {
-        setAiChatHistory(prev => [...prev, { sender: 'ai', message: feedbackMessage, timestamp: new Date() }]);
-    } else {
-        setAiMessageForCollapsedWidget(feedbackMessage);
-    }
-  };
-
-  const handleAddTask = async (taskData: Omit<Task, 'id' | 'completed' | 'userId' | 'createdAt'>) => {
-    if (status !== "authenticated") return;
-    const res = await fetch('/api/tasks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskData) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Task "${taskData.text.substring(0,30)}..." added.`, 'success');
-    } else { handleCrudFeedback(`Failed to add task.`, 'error'); }
-  };
-
-  const handleToggleTask = async (taskId: string, subTaskId?: string) => {
-    if (status !== "authenticated") return;
-    const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
-    let updatePayload: Partial<Task>;
-    if (subTaskId) {
-        const updatedSubTasks = (task.subTasks || []).map(st => st.id === subTaskId ? { ...st, completed: !st.completed } : st );
-        updatePayload = { subTasks: updatedSubTasks };
-        const allSubTasksCompleted = updatedSubTasks.every(st => st.completed);
-        if (updatedSubTasks.length > 0 && allSubTasksCompleted !== task.completed) updatePayload.completed = allSubTasksCompleted;
-    } else {
-        updatePayload = { completed: !task.completed };
-        if (updatePayload.completed && task.subTasks && task.subTasks.length > 0) updatePayload.subTasks = task.subTasks.map(st => ({ ...st, completed: true }));
-    }
-    const res = await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updatePayload) });
-    if (res.ok) fetchData(currentCategory);
-    else handleCrudFeedback("Failed to toggle task.", 'error');
-  };
-
-  const handleDeleteTask = async (taskId: string) => {
-    if (status !== "authenticated") return;
-    const res = await fetch(`/api/tasks/${taskId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Task deleted.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to delete task.`, 'error'); }
+  const toggleDay = (dayIndex: number) => {
+    setDaysOfWeek(prev => {
+        const newDays = prev.includes(dayIndex) ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex];
+        return newDays;
+    });
   };
   
-  const handleUpdateTask = async (taskId: string, taskUpdateData: Partial<Omit<Task, 'id' | 'userId'>>) => {
-    if (status !== "authenticated") return;
-    if (taskUpdateData.subTasks) taskUpdateData.subTasks = taskUpdateData.subTasks.map(st => ({ ...st, id: st.id || uuidv4() }));
-    const res = await fetch(`/api/tasks/${taskId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(taskUpdateData) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Task updated.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to update task.`, 'error'); }
-  };
-
-  const handleAddGoal = async (name: string, targetValue: number, unit: string, category: Category) => {
-    if (status !== "authenticated") return;
-    const res = await fetch('/api/goals', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, currentValue: 0, targetValue, unit, category }) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal "${name.substring(0,30)}..." added.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to add goal.`, 'error'); }
-  };
-
-  const handleUpdateGoal = async (goalId: string, currentValue?: number, name?: string, targetValue?: number, unit?: string, categoryProp?: Category) => {
-    if (status !== "authenticated") return;
-    const goal = goals.find(g => g.id === goalId);
-    if (!goal) return;
-    const payload: any = { name: name ?? goal.name, unit: unit ?? goal.unit, category: categoryProp ?? goal.category };
-    if(targetValue !== undefined) payload.targetValue = targetValue; else payload.targetValue = goal.targetValue;
-    if(currentValue !== undefined) payload.currentValue = Math.max(0, Math.min(currentValue, payload.targetValue)); else payload.currentValue = goal.currentValue;
-    const res = await fetch(`/api/goals/${goalId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal updated.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to update goal.`, 'error'); }
-  };
-
-  const handleDeleteGoal = async (goalId: string) => {
-    if (status !== "authenticated") return;
-    const res = await fetch(`/api/goals/${goalId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Goal deleted.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to delete goal.`, 'error'); }
-  };
-  
-  const handleAddNote = async (title: string | undefined, content: string, category: Category) => {
-    if (status !== "authenticated") return;
-    const res = await fetch('/api/notes', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category }) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Note "${(title || content).substring(0,20)}..." added.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to add note.`, 'error'); }
-  };
-
-  const handleUpdateNote = async (noteId: string, title: string | undefined, content: string, categoryProp?: Category) => {
-     if (status !== "authenticated") return;
-     const note = notes.find(n => n.id === noteId);
-     if (!note) return;
-    const res = await fetch(`/api/notes/${noteId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, content, category: categoryProp || note.category }) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Note updated.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to update note.`, 'error'); }
-  };
-
-  const handleDeleteNote = async (noteId: string) => {
-    if (status !== "authenticated") return;
-    const res = await fetch(`/api/notes/${noteId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Note deleted.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to delete note.`, 'error'); }
-  };
-
-  const handleAddEvent = async (eventData: Omit<AppEvent, 'id' | 'userId' | 'createdAt'>) => {
-    if (status !== "authenticated") return;
-    const res = await fetch('/api/events', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventData) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Event "${eventData.title.substring(0,30)}..." added.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to add event.`, 'error'); }
-  };
-  
-  const handleUpdateEvent = async (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id' | 'userId'>>) => {
-    if (status !== "authenticated") return;
-    const res = await fetch(`/api/events/${eventId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(eventUpdateData) });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Event updated.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to update event.`, 'error'); }
-  };
-
-  const handleDeleteEvent = async (eventId: string) => {
-    if (status !== "authenticated") return;
-    const res = await fetch(`/api/events/${eventId}`, { method: 'DELETE' });
-    if (res.ok) { fetchData(currentCategory); handleCrudFeedback(`Event deleted.`, 'success'); } 
-    else { handleCrudFeedback(`Failed to delete event.`, 'error'); }
-  };
-
-  const onCategoryChange = (category: Category) => {
-    setCurrentCategory(category);
-    if (isAiChatModeActive) {
-       setAiChatHistory([]);
-       sendAiRequest([{text: `Switched to ${category} project view.`}], [], 'chatSession'); // Inform AI about context switch
-    }
-    setAiMessageForCollapsedWidget(null); 
-  };
-
-  const navigateToItemHandler = (type: 'tasks' | 'calendar' | 'notes' | 'goals', id: string) => {
-    if (isAiChatModeActive) handleToggleAiChatMode(); 
-    setViewMode(type); 
-    router.push(`/?view=${type}&id=${id}`, { scroll: false });
-  };
-
-  const renderDashboardView = () => {
-    if (isLoading && !initialLoadDone) {
-        return <div className="flex justify-center items-center h-full"><p className="text-xl accent-text">Loading Dashboard...</p></div>;
-    }
-    if (status === "unauthenticated") { 
-        return <div className="flex justify-center items-center h-full"><p className="text-xl accent-text">Redirecting to login...</p></div>;
-    }
-    const dashboardDataProps = {
-      tasks: tasks.filter(t => currentCategory === "All Projects" || t.category === currentCategory),
-      goals: goals.filter(g => currentCategory === "All Projects" || g.category === currentCategory),
-      notes: notes.filter(n => currentCategory === "All Projects" || n.category === currentCategory).sort((a,b) => new Date(b.lastEdited).getTime() - new Date(a.lastEdited).getTime()),
-      events: events.filter(e => currentCategory === "All Projects" || e.category === currentCategory),
-    };
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 h-full">
-          <div className="lg:row-span-2 flex flex-col gap-5 md:gap-6">
-            <AiAssistantWidget 
-                initialMessage={aiMessageForCollapsedWidget}
-                isChatModeActive={false} 
-                onToggleChatMode={handleToggleAiChatMode}
-                chatHistory={[]} 
-                isProcessingAi={isProcessingAi}
-            />
-            <TasksWidget 
-                tasks={dashboardDataProps.tasks} 
-                onTaskToggle={handleToggleTask} 
-                onNavigate={() => { setViewMode('tasks'); router.push('/?view=tasks', { scroll: false }); }}
-                className="flex-grow"
-            />
-          </div>
-          <div className="flex flex-col space-y-5 md:space-y-6">
-            <CalendarWidget events={dashboardDataProps.events} onNavigate={() => { setViewMode('calendar'); router.push('/?view=calendar', { scroll: false }); }} />
-            <DueSoonWidget 
-                tasks={tasks} 
-                events={events} 
-                currentProjectId={currentCategory === "All Projects" ? null : currentCategory} 
-                onNavigateToItem={navigateToItemHandler}
-            />
-          </div>
-          <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => { setViewMode('goals'); router.push('/?view=goals', { scroll: false }); }} />
-          <QuickNotesWidget notes={dashboardDataProps.notes} onNavigate={() => { setViewMode('notes'); router.push('/?view=notes', { scroll: false }); }} />
-        </div>
-    );
+  if (!type && !recurrence) { 
+    return <Button variant="outline" size="sm" onClick={() => handleTypeChangeInternal('weekly')} className="w-full input-field text-xs justify-start font-normal"><Repeat className="w-3 h-3 mr-1.5"/>Set Recurrence</Button>
   }
-
-  const renderView = () => {
-    const commonViewProps = {
-        categories: baseAvailableCategories,
-        currentCategory: (currentCategory === "All Projects" || !baseAvailableCategories.includes(currentCategory)) && baseAvailableCategories.length > 0 ? baseAvailableCategories[0] : currentCategory,
-        onClose: () => { 
-            setViewMode('dashboard'); 
-            setAiMessageForCollapsedWidget(null); 
-            router.push('/', { scroll: false }); 
-        },
-    };
-    
-    if (isAiChatModeActive) {
-        return (
-            <div className="h-full w-full max-w-4xl mx-auto">
-                <AiAssistantWidget
-                    initialMessage={null}
-                    isChatModeActive={true}
-                    onToggleChatMode={handleToggleAiChatMode}
-                    chatHistory={aiChatHistory}
-                    isProcessingAi={isProcessingAi}
-                />
-            </div>
-        );
-    }
-    
-    switch (viewMode) {
-      case 'tasks':
-        return <TasksView {...commonViewProps} tasks={tasks} onAddTask={handleAddTask} onToggleTask={handleToggleTask} onDeleteTask={handleDeleteTask} onUpdateTask={handleUpdateTask} />;
-      case 'goals':
-        return <GoalsView {...commonViewProps} goals={goals} onAddGoal={handleAddGoal} onUpdateGoal={handleUpdateGoal} onDeleteGoal={handleDeleteGoal} />;
-      case 'notes':
-        return <NotesView {...commonViewProps} notes={notes} onAddNote={handleAddNote} onUpdateNote={handleUpdateNote} onDeleteNote={handleDeleteNote} />;
-      case 'calendar':
-        return <CalendarFullScreenView {...commonViewProps} events={events} onAddEvent={handleAddEvent} onUpdateEvent={handleUpdateEvent} onDeleteEvent={handleDeleteEvent} />;
-      case 'dashboard':
-      default:
-        return renderDashboardView();
-    }
-  };
-
-  if (status === "loading" && !initialLoadDone) {
-    return (
-        <div className="flex flex-col min-h-screen">
-            <Header />
-            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> 
-                <p className="text-xl accent-text">Initializing AYANDA...</p>
-            </main>
-        </div>
-    );
-  }
-  if (status === "unauthenticated" && (pathname === "/" || !["/login", "/register", "/landing"].includes(pathname))) {
-     return (
-        <div className="flex flex-col min-h-screen">
-            <Header />
-            <main className="flex-grow px-6 pb-24 pt-[calc(5rem+2.875rem+0.75rem)] flex justify-center items-center"> 
-                <p className="text-xl accent-text">Redirecting to login...</p>
-            </main>
-        </div>
-     );
-  }
-
-  const showProjectBar = status === "authenticated" && !["/login", "/register", "/landing"].includes(pathname);
-  
-  const mainPaddingTop = isAiChatModeActive 
-      ? "pt-[5rem]" 
-      : (viewMode !== 'dashboard' && viewMode !== undefined) 
-          ? "pt-[5rem]" 
-          : showProjectBar 
-              ? "pt-[calc(5rem+2.875rem+1.5rem)]" 
-              : "pt-[calc(5rem+1.5rem)]";
-
-  const mainHeightStyle = isAiChatModeActive
-      ? { height: "calc(100vh - 5rem - 70px)" } 
-      : showProjectBar 
-          ? { height: "calc(100vh - (5rem + 2.875rem) - 70px)" } 
-          : { height: "calc(100vh - 5rem - 70px)" }; 
 
   return (
-    <div className="flex flex-col min-h-screen h-screen max-h-screen overflow-hidden">
-      <Header />
-      {showProjectBar && !isAiChatModeActive && (
-         <ProjectSelectorBar 
-            currentCategory={currentCategory}
-            onCategoryChange={onCategoryChange}
-            availableCategories={availableCategoriesForDropdown}
-          />
-      )}
-      <main 
-        className={cn(
-            "flex-grow px-6 pb-6 overflow-y-auto custom-scrollbar-fullscreen",
-            isAiChatModeActive && "flex justify-center", 
-            mainPaddingTop
-        )}
-        style={mainHeightStyle}
+    <div className="space-y-2 p-3 border border-border-main rounded-md bg-input-bg/50 mt-2">
+      <div className="flex items-center justify-between">
+        <p className="text-xs font-medium text-muted-foreground">Recurrence</p>
+        <Button variant="ghost" size="icon" className="w-5 h-5" onClick={() => handleTypeChangeInternal('')}><X className="w-3 h-3"/></Button>
+      </div>
+      <Select 
+        value={type} 
+        onValueChange={handleTypeChangeInternal}
       >
-        {renderView()}
-      </main>
-      {status === "authenticated" && (
-        <FooterChat 
-            onSendCommand={handleCommandFromFooter} 
-            onSendAudioCommand={handleAudioCommandFromFooter}
-            isProcessingAi={isProcessingAi}
-            isAiChatModeActive={isAiChatModeActive}
-            currentChatInput={currentFooterChatMessage}
-            onChatInputChange={setCurrentFooterChatMessage}
-        />
+        <SelectTrigger className="input-field text-xs h-8"><SelectValue placeholder="No Recurrence" /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="daily">Daily</SelectItem>
+          <SelectItem value="weekly">Weekly</SelectItem>
+          <SelectItem value="monthly">Monthly (on start date&apos;s day)</SelectItem>
+          <SelectItem value="yearly">Yearly (on start date)</SelectItem>
+          <SelectItem value="">Disable Recurrence</SelectItem>
+        </SelectContent>
+      </Select>
+      {type && ( 
+        <>
+            <Input type="number" min="1" value={interval} onChange={e => setIntervalValue(Math.max(1, parseInt(e.target.value)))} placeholder="Interval" className="input-field text-xs h-8" />
+            {type === 'weekly' && (
+                <div className="grid grid-cols-4 sm:grid-cols-7 gap-1">
+                {weekDays.map((day, i) => (
+                    <Button key={i} variant={daysOfWeek.includes(i) ? 'default': 'outline'} size="sm" onClick={() => toggleDay(i)} className={cn("text-[10px] flex-1 h-7 px-1", daysOfWeek.includes(i) ? 'bg-primary text-primary-foreground' : 'border-border-main')}>
+                    {day}
+                    </Button>
+                ))}
+                </div>
+            )}
+            <Input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} placeholder="End Date (optional)" title="Recurrence End Date" className="input-field text-xs h-8" />
+        </>
       )}
+    </div>
+  );
+};
+
+interface CalendarFullScreenViewProps {
+  events: AppEvent[];
+  categories: Category[]; 
+  currentCategory: Category; 
+  onAddEvent: (eventData: Omit<AppEvent, 'id' | 'userId'>) => void;
+  onUpdateEvent: (eventId: string, eventUpdateData: Partial<Omit<AppEvent, 'id' | 'userId'>>) => void;
+  onDeleteEvent: (eventId: string) => void;
+  onClose: () => void;
+}
+
+interface EventFormData {
+  title: string;
+  date: string; 
+  time: string; 
+  category: Category; 
+  description?: string;
+  recurrenceRule?: RecurrenceRule;
+}
+
+export function CalendarFullScreenView({
+  events, categories, currentCategory, onAddEvent, onUpdateEvent, onDeleteEvent, onClose
+}: CalendarFullScreenViewProps) {
+  const [selectedDate, setSelectedDate] = useState<Date | undefined>(new Date());
+  const [viewMonth, setViewMonth] = useState<Date>(new Date());
+  const [showEventForm, setShowEventForm] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<AppEvent | null>(null);
+  const [isPreviewingDescription, setIsPreviewingDescription] = useState(false);
+  
+  const resolvedInitialCategoryForForm = useMemo<Category>(() => { 
+    if (currentCategory !== "All Projects" && categories.includes(currentCategory)) {
+        return currentCategory;
+    }
+    const firstSpecificCategory = categories.find(c => c !== "All Projects" && c !== undefined);
+    if (firstSpecificCategory) {
+        return firstSpecificCategory;
+    }
+    const firstCat = categories.length > 0 && categories[0] !== "All Projects" ? categories[0] : undefined;
+    return firstCat || "Personal Life" as Category; 
+  }, [currentCategory, categories]);
+
+  const [formData, setFormData] = useState<EventFormData>(() => {
+    return {
+        title: '',
+        date: format(selectedDate || new Date(), 'yyyy-MM-dd'),
+        time: '12:00',
+        category: resolvedInitialCategoryForForm, 
+        description: '',
+        recurrenceRule: undefined,
+    };
+  });
+
+  useEffect(() => {
+    if (!showEventForm && !editingEvent) { 
+      const newDefaultDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+      setFormData(prev => {
+        if (prev.category !== resolvedInitialCategoryForForm || prev.date !== newDefaultDate) {
+          return { 
+            title: '', 
+            description: '', 
+            recurrenceRule: undefined, 
+            time: '12:00', 
+            category: resolvedInitialCategoryForForm, 
+            date: newDefaultDate 
+          };
+        }
+        return prev; 
+      });
+    }
+  }, [selectedDate, resolvedInitialCategoryForForm, showEventForm, editingEvent]);
+
+
+  const handleShowNewEventForm = () => {
+    setEditingEvent(null);
+    setIsPreviewingDescription(false);
+    const newDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+    setFormData({ 
+      title: '',
+      date: newDate,
+      time: '12:00',
+      category: resolvedInitialCategoryForForm, 
+      description: '',
+      recurrenceRule: undefined, 
+    });
+    setShowEventForm(true);
+  };
+
+  useEffect(() => {
+    if (editingEvent) {
+      const eventDateObj = parseISO(editingEvent.date);
+      const isValidSpecificCategory = categories.includes(editingEvent.category as Category);
+      const categoryToSetForForm: Category = isValidSpecificCategory
+        ? editingEvent.category as Category 
+        : resolvedInitialCategoryForForm;  
+
+      setFormData({
+        title: editingEvent.title,
+        date: format(eventDateObj, 'yyyy-MM-dd'),
+        time: format(eventDateObj, 'HH:mm'),
+        category: categoryToSetForForm, 
+        description: editingEvent.description || '',
+        recurrenceRule: editingEvent.recurrenceRule, 
+      });
+      setShowEventForm(true);
+      setIsPreviewingDescription(false);
+    }
+  }, [editingEvent, categories, resolvedInitialCategoryForForm]);
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
+    const { name, value } = e.target;
+    setFormData(prev => ({ ...prev, [name]: value }));
+  };
+  
+  const handleCategoryChange = useCallback((newCategoryValue: string) => {
+    setFormData(prevFormData => {
+      if (newCategoryValue !== prevFormData.category) {
+        const foundCategory = categories.find(cat => cat === newCategoryValue);
+        if (foundCategory) {
+          return { ...prevFormData, category: foundCategory };
+        }
+        return prevFormData; 
+      }
+      return prevFormData; 
+    });
+  }, [categories]); 
+
+  const handleRecurrenceChange = useCallback((newRule: RecurrenceRule | undefined) => {
+    setFormData(prevFormData => {
+      if (JSON.stringify(newRule) !== JSON.stringify(prevFormData.recurrenceRule)) {
+        return { ...prevFormData, recurrenceRule: newRule };
+      }
+      return prevFormData;
+    });
+  }, []); 
+
+  const resetForm = () => {
+    setShowEventForm(false);
+    setEditingEvent(null);
+    setIsPreviewingDescription(false);
+    const newDate = selectedDate ? format(selectedDate, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+    setFormData({ 
+      title: '',
+      date: newDate,
+      time: '12:00',
+      category: resolvedInitialCategoryForForm, 
+      description: '',
+      recurrenceRule: undefined,
+    });
+  };
+
+  const handleSubmitEvent = () => {
+    if (!formData.title || !formData.date || !formData.time) {
+        return;
+    }
+    const dateTimeString = `${formData.date}T${formData.time}:00.000Z`; 
+    const eventDataSubmit = {
+        title: formData.title,
+        date: dateTimeString,
+        category: formData.category, 
+        description: formData.description,
+        recurrenceRule: formData.recurrenceRule,
+    };
+    if (editingEvent) {
+      onUpdateEvent(editingEvent.id, eventDataSubmit);
+    } else {
+      onAddEvent(eventDataSubmit);
+    }
+    resetForm();
+  };
+  
+  const getNextOccurrence = (event: AppEvent, fromDate: Date): Date | null => {
+    if (!event.recurrenceRule) return null;
+    const rule = event.recurrenceRule;
+    const baseDate = startOfDay(parseISO(event.date)); 
+    const checkDate = startOfDay(fromDate); 
+
+    if (rule.endDate && checkDate > startOfDay(parseISO(rule.endDate))) return null;
+
+    for(let i=0; i< 365; i++) { 
+        let currentIterDate: Date;
+        switch(rule.type) {
+            case 'daily': 
+                currentIterDate = add(baseDate, { days: rule.interval * i });
+                break;
+            case 'weekly':
+                currentIterDate = add(baseDate, { weeks: rule.interval * i });
+                if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
+                    const baseDayOfWeek = currentIterDate.getDay();
+                    const targetDayInWeek = rule.daysOfWeek.find(d => d >= baseDayOfWeek);
+                    if (targetDayInWeek !== undefined) {
+                        currentIterDate = add(currentIterDate, { days: targetDayInWeek - baseDayOfWeek });
+                    } else { 
+                        currentIterDate = add(baseDate, { weeks: rule.interval * (i + 1) }); 
+                        currentIterDate = add(currentIterDate, { days: rule.daysOfWeek[0] - currentIterDate.getDay() }); 
+                    }
+                }
+                break;
+            case 'monthly': 
+                currentIterDate = add(baseDate, { months: rule.interval * i}); 
+                if (currentIterDate.getDate() !== baseDate.getDate()) { 
+                    const lastDayOfMonth = new Date(currentIterDate.getFullYear(), currentIterDate.getMonth() + 1, 0).getDate();
+                    if (baseDate.getDate() > lastDayOfMonth) { 
+                        currentIterDate.setDate(lastDayOfMonth);
+                    } else { 
+                         currentIterDate.setDate(baseDate.getDate());
+                    }
+                }
+                break;
+            case 'yearly': 
+                currentIterDate = add(baseDate, { years: rule.interval * i}); 
+                if (currentIterDate.getMonth() !== baseDate.getMonth() || currentIterDate.getDate() !== baseDate.getDate()) {
+                    currentIterDate = new Date(currentIterDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+                }
+                break;
+            default: return null;
+        }
+        currentIterDate = startOfDay(currentIterDate);
+
+        if(currentIterDate >= checkDate) { 
+             if (rule.endDate && currentIterDate > startOfDay(parseISO(rule.endDate))) return null; 
+            return currentIterDate;
+        }
+    }
+    return null;
+  };
+  
+  // Helper to get events for a specific day (used by DayCellContent)
+  const getEventsForDay = (day: Date): AppEvent[] => {
+    const dayStart = startOfDay(day);
+    return events.flatMap(event => {
+      if (!event) return [];
+      const eventBaseDate = startOfDay(parseISO(event.date));
+      const results: AppEvent[] = [];
+      if (isSameDay(eventBaseDate, dayStart)) {
+        results.push(event);
+      }
+      if (event.recurrenceRule) {
+        const next = getNextOccurrence(event, dayStart);
+        if (next && isSameDay(next, dayStart) && !isSameDay(eventBaseDate, dayStart)) {
+          results.push({
+            ...event,
+            date: format(dayStart, 'yyyy-MM-dd') + 'T' + format(parseISO(event.date), 'HH:mm:ss.SSS') + 'Z',
+          });
+        }
+      }
+      return results;
+    }).filter((event, index, self) => index === self.findIndex((e) => e.id === event.id && e.date === event.date));
+  };
+
+
+  const DayCellContent: DateFormatter = (day, options): React.ReactNode => { 
+    const dayEvents = getEventsForDay(day);
+    const hasEvent = dayEvents.length > 0;
+    const firstEventTitle = hasEvent ? dayEvents[0].title : '';
+
+    return (
+      <div className="relative w-full h-full flex flex-col items-center justify-start pt-1 overflow-hidden">
+        <span className={cn("text-xs", hasEvent && "font-semibold text-base mb-0.5")}>
+            {format(day, "d", { locale: options?.locale })}
+        </span>
+        {hasEvent && (
+          <span className="text-[10px] leading-tight text-primary truncate w-full px-1 text-center">
+            {firstEventTitle}
+          </span>
+        )}
+        {hasEvent && (
+          <span className={cn(
+              "absolute bottom-1 left-1/2 -translate-x-1/2 size-1.5 rounded-full bg-primary opacity-70"
+          )} />
+        )}
+      </div>
+    );
+  }; 
+  
+  const eventsForSelectedDay = selectedDate ? getEventsForDay(selectedDate)
+    .sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime()) : [];
+
+
+  return (
+    <div className={cn(
+        "fixed inset-0 z-[85] bg-background p-6 flex flex-col",
+        "pt-[calc(5rem+2.75rem+1.5rem)]" 
+    )}>
+        <div className="flex justify-between items-center mb-6">
+            <h2 className="font-orbitron text-3xl accent-text">Calendar</h2>
+            <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text p-2 rounded-md hover:bg-input-bg">
+                <X className="w-7 h-7" />
+            </Button>
+        </div>
+
+        <div className="flex-grow flex gap-6 overflow-hidden">
+            <div className="w-2/3 lg:w-3/4 bg-widget-background border border-border-main rounded-md p-6 flex flex-col items-center justify-start custom-scrollbar-fullscreen">
+                <Calendar
+                    mode="single"
+                    selected={selectedDate}
+                    onSelect={(day) => {
+                        setSelectedDate(day);
+                    }}
+                    month={viewMonth}
+                    onMonthChange={(month) => {
+                        setViewMonth(month);
+                    }}
+                    className="w-full" 
+                    classNames={{
+                        root: "w-full", 
+                        months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
+                        month: "space-y-4 w-full",
+                        caption: "flex justify-center pt-1 relative items-center h-10 mb-2",
+                        caption_label: "text-xl font-orbitron accent-text",
+                        nav: "space-x-1 flex items-center",
+                        nav_button: cn(
+                            "h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100",
+                            "rounded-md hover:bg-accent/20 text-muted-foreground hover:text-accent-foreground transition-colors",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        ),
+                        nav_button_previous: "absolute left-1",
+                        nav_button_next: "absolute right-1",
+                        table: "w-full border-collapse space-y-1",
+                        head_row: "flex w-full mb-1",
+                        head_cell: "text-muted-foreground rounded-md w-[14.28%] text-xs font-medium p-1 h-8 justify-center",
+                        row: "flex w-full mt-2",
+                        cell: cn(
+                            "text-center text-sm p-0 relative w-[14.28%] h-20 sm:h-24 focus-within:relative focus-within:z-20", // Increased height
+                            // The following line seems to have a conditional class application. Let's ensure it's correct.
+                            // If you intend 'day_selected' to always have rounded-md, it should be part of its own class definition.
+                            // This line seems to be about range selection, which is not the primary mode here.
+                            // For single select, `day_selected` will handle its own rounding.
+                            // "[&:has([aria-selected].day-outside)]:bg-accent/50", 
+                        ),
+                        day: cn(
+                            "w-full h-full p-0 font-normal rounded-md",
+                            "hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+                            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                            "transition-colors flex flex-col items-center justify-start" // Align content top
+                        ),
+                        day_selected: "bg-primary text-primary-foreground hover:bg-primary/90 focus:bg-primary focus:text-primary-foreground",
+                        day_today: "bg-accent text-accent-foreground ring-1 ring-primary/60",
+                        day_outside: "text-muted-foreground opacity-50 aria-selected:bg-accent/50 aria-selected:text-muted-foreground aria-selected:opacity-30",
+                        day_disabled: "text-muted-foreground opacity-50 pointer-events-none",
+                    }}
+                    components={{
+                        IconLeft: ({ ...props }) => <ChevronLeft {...props} className="h-5 w-5" />,
+                        IconRight: ({ ...props }) => <ChevronRight {...props} className="h-5 w-5" />,
+                    }}
+                    formatters={{ formatDay: DayCellContent }}
+                    showOutsideDays
+                    fixedWeeks
+                />
+            </div>
+
+            <div className="w-1/3 lg:w-1/4 bg-widget-background border border-border-main rounded-md p-4 flex flex-col space-y-4 overflow-y-auto custom-scrollbar-fullscreen">
+                <Button onClick={handleShowNewEventForm} className="w-full btn-primary">
+                    <PlusCircle className="w-4 h-4 mr-2"/> Add Event
+                </Button>
+
+                {showEventForm && (
+                    <div className="p-3 border border-border-main rounded-md bg-input-bg/70 space-y-3">
+                        <h3 className="font-orbitron text-lg accent-text">{editingEvent ? 'Edit Event' : 'New Event'}</h3>
+                        <Input name="title" placeholder="Event Title" value={formData.title} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
+                        <div className="flex gap-2">
+                            <Input name="date" type="date" value={formData.date} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
+                            <Input name="time" type="time" value={formData.time} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
+                        </div>
+                        <Select name="category" value={formData.category} onValueChange={handleCategoryChange} disabled={isPreviewingDescription}>
+                            <SelectTrigger className="input-field"><SelectValue placeholder="Category" /></SelectTrigger>
+                            <SelectContent className="bg-widget-background border-border-main">
+                                {categories.map(cat => {
+                                    return <SelectItem key={cat} value={cat}>{cat}</SelectItem>;
+                                })}
+                            </SelectContent>
+                        </Select>
+                        <div>
+                            <div className="flex justify-between items-center mb-1">
+                                <label htmlFor="event-description" className="text-xs text-muted-foreground">Description (Markdown)</label>
+                                <div>
+                                    <Popover>
+                                        <PopoverTrigger asChild>
+                                            <Button variant="ghost" size="sm" className="text-xs text-muted-foreground h-6 px-1">Help</Button>
+                                        </PopoverTrigger>
+                                        <PopoverContent className="p-0 w-auto"><MarkdownCheatsheet/></PopoverContent>
+                                    </Popover>
+                                    <Button variant="ghost" size="icon" onClick={() => setIsPreviewingDescription(!isPreviewingDescription)} className="w-6 h-6 ml-1">
+                                        {isPreviewingDescription ? <Pencil className="w-3 h-3"/> : <Eye className="w-3 h-3"/>}
+                                    </Button>
+                                </div>
+                            </div>
+                            {isPreviewingDescription ? (
+                                <div className="prose prose-sm dark:prose-invert max-w-none p-2 min-h-[60px] border border-dashed border-border-main rounded-md bg-background/50">
+                                    <ReactMarkdown>{formData.description || "Nothing to preview..."}</ReactMarkdown>
+                                </div>
+                            ) : (
+                                <Textarea id="event-description" name="description" placeholder="Details... (Markdown supported)" value={formData.description || ''} onChange={handleInputChange} className="input-field min-h-[60px]"/>
+                            )}
+                        </div>
+                        {!isPreviewingDescription && 
+                            <EventRecurrenceEditor 
+                                recurrence={formData.recurrenceRule} 
+                                onChange={handleRecurrenceChange} 
+                                startDate={formData.date}
+                            />
+                        }
+                        <div className="flex gap-2 pt-2">
+                            <Button onClick={handleSubmitEvent} className="flex-grow btn-primary" disabled={isPreviewingDescription}>{editingEvent ? 'Save Changes' : 'Add Event'}</Button>
+                            <Button variant="outline" onClick={resetForm} className="border-border-main text-muted-foreground hover:bg-background">Cancel</Button>
+                        </div>
+                    </div>
+                )}
+
+                {!showEventForm && selectedDate && (
+                    <div>
+                        <h3 className="font-orbitron text-lg accent-text mb-2">
+                            Events for: {format(selectedDate, 'MMM d, yyyy')}
+                        </h3>
+                        {eventsForSelectedDay.length > 0 ? (
+                            <ul className="space-y-2">
+                                {eventsForSelectedDay.map((event, idx) => ( 
+                                    <li key={`${event.id}-${idx}`} className="p-2.5 bg-input-bg/70 border border-border-main rounded-md">
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <p className="font-semibold text-sm text-foreground">{event.title}</p>
+                                                <p className="text-xs text-muted-foreground">
+                                                    {format(parseISO(event.date), 'p')} - {event.category}
+                                                    {event.recurrenceRule && <Repeat className="w-3 h-3 inline ml-1.5 text-muted-foreground/70"/>}
+                                                </p>
+                                            </div>
+                                            <div className="flex gap-1 shrink-0">
+                                                <Button variant="ghost" size="icon" onClick={() => { 
+                                                    const originalEvent = events.find(e => e.id === event.id); 
+                                                    setEditingEvent(originalEvent || event);
+                                                }} className="btn-icon w-6 h-6"><Edit className="w-3.5 h-3.5"/></Button>
+                                                <Button variant="ghost" size="icon" onClick={() => onDeleteEvent(event.id)} className="btn-icon danger w-6 h-6"><Trash2 className="w-3.5 h-3.5"/></Button>
+                                            </div>
+                                        </div>
+                                        {event.description && (
+                                            <div className="prose prose-sm dark:prose-invert max-w-none mt-1 pt-1 border-t border-border-main/50 text-foreground">
+                                               <ReactMarkdown>{event.description}</ReactMarkdown>
+                                            </div>
+                                        )}
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : (
+                            <p className="text-sm text-muted-foreground text-center py-4">No events for this day.</p>
+                        )}
+                    </div>
+                )}
+                 {!showEventForm && !selectedDate && (
+                    <p className="text-sm text-muted-foreground text-center py-4">Select a date to see events.</p>
+                )}
+            </div>
+        </div>
     </div>
   );
 }
 
-```
-
-## src/app/api/ai/route.ts
-
-```typescript
-import { NextRequest, NextResponse } from 'next/server';
-import { processWithGemini, generateUserContextSummary, ProcessedGeminiOutput, AiOperation, InteractionMode } from '@/lib/gemini';
-import { Category, Task, Note, Goal, Event as AppEvent, SubTask } from '@/types';
-import { v4 as uuidv4 } from 'uuid';
-import dbConnect from '@/lib/mongodb';
-import TaskModel from '@/models/TaskModel';
-import NoteModel from '@/models/NoteModel';
-import GoalModel from '@/models/GoalModel';
-import EventModel from '@/models/EventModel';
-import UserModel from '@/models/UserModel';
-import { getToken } from 'next-auth/jwt';
-import type { Part, Content } from '@google/generative-ai';
-import { ExecutedOperationInfo } from '@/components/dashboard/AiAssistantWidget'; // Ensure this path is correct
-
-const baseAvailableCategories: Category[] = ["Personal Life", "Work", "Studies"];
-
-async function findTaskByName(userId: string, taskName: string, category?: Category): Promise<Task | null> {
-    const query: any = { userId, text: { $regex: `^${taskName}$`, $options: 'i' } };
-    if (category && category !== "All Projects") {
-        query.category = category;
-    }
-    return TaskModel.findOne(query).lean();
-}
-
-
-export async function POST(request: NextRequest) {
-  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
-  if (!token || !token.id) {
-    return NextResponse.json({ message: 'Unauthorized for AI command' }, { status: 401 });
-  }
-  const userId = token.id as string;
-
-  await dbConnect();
-  try {
-    const { 
-        parts, 
-        currentCategory, 
-        chatHistory, 
-        isEndingChatSession, 
-        interactionMode 
-    } = await request.json();
-
-    if (!interactionMode || (interactionMode !== 'quickCommand' && interactionMode !== 'chatSession')) {
-        return NextResponse.json({ message: 'Valid interactionMode is required.' }, { status: 400 });
-    }
-
-    // Relaxed validation: parts can be empty for initial chat greeting or session ending
-    if (!isEndingChatSession && (!parts || (parts as Part[]).length === 0) && interactionMode === 'quickCommand') {
-        return NextResponse.json({ message: 'Input parts are required for quick commands.' }, { status: 400 });
-    }
-    // currentCategory is needed if parts are present and not ending session
-    if (!currentCategory && !isEndingChatSession && parts && (parts as Part[]).length > 0) {
-        return NextResponse.json({ message: 'currentCategory is required when parts are provided.' }, { status: 400 });
-    }
-
-
-    const userProfile = await UserModel.findOne({ id: userId });
-    const persistentUserContextSummary = userProfile?.userContextSummary || "";
-
-    if (isEndingChatSession && chatHistory && Array.isArray(chatHistory)) {
-        const sessionTranscript = chatHistory as Content[];
-        const newSummary = (sessionTranscript.length > 0) 
-            ? await generateUserContextSummary(sessionTranscript, persistentUserContextSummary)
-            : persistentUserContextSummary; 
-
-        if (userProfile) {
-            if (newSummary !== undefined && newSummary !== persistentUserContextSummary) {
-                userProfile.userContextSummary = newSummary; 
-                if(persistentUserContextSummary && newSummary === "") {
-                    userProfile.markModified('userContextSummary');
-                }
-                const MAX_CONTEXT_LENGTH = 10000; 
-                if (userProfile.userContextSummary.length > MAX_CONTEXT_LENGTH) {
-                    console.warn(`[AI API] User context summary for ${userId} exceeded ${MAX_CONTEXT_LENGTH} chars and was truncated.`);
-                    userProfile.userContextSummary = userProfile.userContextSummary.slice(-MAX_CONTEXT_LENGTH);
-                }
-                
-                try {
-                    console.log(`[AI API] Attempting to save user context for user ${userId}. New summary length: ${newSummary.length}. Old summary length: ${persistentUserContextSummary.length}`);
-                    await userProfile.save();
-                    const updatedProfileCheck = await UserModel.findOne({ id: userId }).select('userContextSummary');
-                    if (updatedProfileCheck) {
-                        const dbSummary = updatedProfileCheck.userContextSummary || "";
-                        console.log(`[AI API] Verification fetch - DB summary after save: "${dbSummary.substring(0, 100)}..."`);
-                        if (dbSummary === newSummary) { console.log(`[AI API] SUCCESSFULLY SAVED new summary for user ${userId}.`); } 
-                        else { console.error(`[AI API] DISCREPANCY: New summary NOT fully saved for user ${userId}. DB has: "${dbSummary.substring(0,100)}..." vs Proposed: "${newSummary.substring(0,100)}..."`); }
-                    } else { console.error(`[AI API] Verification fetch FAILED for user ${userId} after save attempt.`); }
-                    return NextResponse.json({ aiMessage: "Chat session concluded. User context updated.", operations: [] }, { status: 200 });
-                } catch (saveError) {
-                    console.error(`[AI API] Error saving user profile for user ${userId}:`, saveError);
-                    return NextResponse.json({ aiMessage: "Chat session ended, but failed to save updated user context.", error: (saveError as Error).message, operations: [] }, { status: 500 });
-                }
-            } else {
-                 console.log(`[AI API] User context for user ${userId} unchanged. No save needed.`);
-                 return NextResponse.json({ aiMessage: "Chat session ended. User context remains unchanged.", operations: [] }, { status: 200 });
-            }
-        } else {
-            console.error(`[AI API] User profile not found for ID ${userId} when trying to save context summary.`);
-            return NextResponse.json({ aiMessage: "Chat session ended, but user profile not found to save context.", operations: [] }, { status: 404 });
-        }
-    }
-    
-    // If parts is empty here, it means it's an initial chat call (not ending session)
-    const currentParts = (parts && (parts as Part[]).length > 0) ? parts as Part[] : [{text: ""}]; // Send empty text part if none, for initial greeting
-
-    const geminiResult: ProcessedGeminiOutput = await processWithGemini(
-        currentParts, 
-        currentCategory as Category, // Should be valid if currentParts is not empty, or for initial chat
-        ["All Projects", ...baseAvailableCategories],
-        interactionMode as InteractionMode,
-        persistentUserContextSummary,
-        chatHistory as Content[] | undefined
-    );
-
-    if (geminiResult.overallError) {
-      return NextResponse.json({ aiMessage: geminiResult.reply || geminiResult.overallError, operations: geminiResult.operations || [], error: geminiResult.overallError, executedOperationsLog: [] }, { status: 422 });
-    }
-    
-    let executedOperationsInfo: ExecutedOperationInfo[] = [];
-    let hasExecutionErrors = false;
-    
-    if (geminiResult.operations && geminiResult.operations.length > 0) {
-        for (const operation of geminiResult.operations) {
-            let effectiveCategory = operation.payload.category || currentCategory;
-            if ((effectiveCategory === "All Projects" || !baseAvailableCategories.includes(effectiveCategory as Category)) && baseAvailableCategories.length > 0) {
-                effectiveCategory = baseAvailableCategories[0];
-            } else if (!baseAvailableCategories.includes(effectiveCategory as Category)) {
-                effectiveCategory = "Personal Life";
-            }
-            let itemSummary = "";
-
-            try {
-                switch (operation.action) {
-                case 'addTask':
-                    if (!operation.payload.text) throw new Error('Task text is missing.');
-                    itemSummary = operation.payload.text.substring(0, 30);
-                    const newTaskData: Task = {
-                    id: uuidv4(), userId: userId, text: operation.payload.text!, completed: false,
-                    dueDate: operation.payload.dueDate as string | undefined, category: effectiveCategory as Category,
-                    recurrenceRule: operation.payload.recurrenceRule,
-                    subTasks: (operation.payload.subTasks || []).map(st => ({ id: uuidv4(), text: st.text, completed: false })),
-                    createdAt: new Date().toISOString(),
-                    };
-                    const createdTask = new TaskModel(newTaskData); await createdTask.save();
-                    executedOperationsInfo.push({ type: 'Task Added', summary: itemSummary, success: true });
-                    break;
-                
-                case 'updateTask':
-                    let taskToUpdateId = operation.payload.taskIdToUpdate;
-                    let taskInstance = null;
-                    if (taskToUpdateId) { taskInstance = await TaskModel.findOne({ id: taskToUpdateId, userId: userId }); }
-                    else if (operation.payload.text) { 
-                        taskInstance = await findTaskByName(userId, operation.payload.text, effectiveCategory as Category);
-                        if (taskInstance) taskToUpdateId = taskInstance.id; 
-                    }
-                    if (!taskInstance) throw new Error(`Task '${operation.payload.text || taskToUpdateId || 'Unknown'}' not found.`);
-                    itemSummary = taskInstance.text.substring(0, 30);
-                    let updated = false;
-                    if (operation.payload.text !== undefined && operation.payload.text !== taskInstance.text) { taskInstance.text = operation.payload.text; updated = true; }
-                    if (operation.payload.dueDate !== undefined) { taskInstance.dueDate = operation.payload.dueDate; updated = true; }
-                    if (operation.payload.category !== undefined && operation.payload.category !== taskInstance.category) { taskInstance.category = operation.payload.category as Category; updated = true; }
-                    if (operation.payload.completed !== undefined && operation.payload.completed !== taskInstance.completed) { taskInstance.completed = operation.payload.completed; updated = true; }
-                    if (operation.payload.recurrenceRule !== undefined) { taskInstance.recurrenceRule = operation.payload.recurrenceRule; updated = true; }
-                    if (operation.payload.subTasksToAdd && operation.payload.subTasksToAdd.length > 0) {
-                        const newSubTasksForExisting = operation.payload.subTasksToAdd.map(st => ({ id: uuidv4(), text: st.text, completed: false }));
-                        taskInstance.subTasks = [...(taskInstance.subTasks || []), ...newSubTasksForExisting];
-                        updated = true;
-                    }
-                     if (operation.payload.subTasks !== undefined) { 
-                        taskInstance.subTasks = operation.payload.subTasks.map(st => ({ id: st.id || uuidv4(), text: st.text, completed: st.completed || false }));
-                        updated = true;
-                    }
-
-                    if (updated) await taskInstance.save();
-                    executedOperationsInfo.push({ type: 'Task Updated', summary: itemSummary, success: true, error: updated ? undefined : "No changes applied." });
-                    break;
-
-                case 'addNote':
-                    if (!operation.payload.content) throw new Error('Note content is missing.');
-                    itemSummary = operation.payload.title || operation.payload.content.substring(0, 30);
-                    const newNoteData: Note = { id: uuidv4(), userId: userId, title: operation.payload.title as string | undefined, content: operation.payload.content!, category: effectiveCategory as Category, lastEdited: new Date().toISOString() };
-                    const createdNote = new NoteModel(newNoteData); await createdNote.save();
-                    executedOperationsInfo.push({ type: 'Note Added', summary: itemSummary, success: true });
-                    break;
-
-                case 'addGoal':
-                    if (!operation.payload.name || operation.payload.targetValue === undefined || !operation.payload.unit) throw new Error('Goal name, targetValue, or unit is missing.');
-                    itemSummary = operation.payload.name.substring(0, 30);
-                    const newGoalData: Goal = { id: uuidv4(), userId: userId, name: operation.payload.name!, currentValue: (operation.payload as Goal).currentValue || 0, targetValue: operation.payload.targetValue!, unit: operation.payload.unit!, category: effectiveCategory as Category };
-                    const createdGoal = new GoalModel(newGoalData); await createdGoal.save();
-                    executedOperationsInfo.push({ type: 'Goal Added', summary: itemSummary, success: true });
-                    break;
-                    
-                case 'addEvent':
-                    if (!operation.payload.title || !operation.payload.date) throw new Error('Event title or date is missing.');
-                    itemSummary = operation.payload.title.substring(0, 30);
-                    const newEventData: AppEvent = { id: uuidv4(), userId: userId, title: operation.payload.title!, date: operation.payload.date!, description: operation.payload.description as string | undefined, category: effectiveCategory as Category, recurrenceRule: operation.payload.recurrenceRule };
-                    const createdEvent = new EventModel(newEventData); await createdEvent.save();
-                    executedOperationsInfo.push({ type: 'Event Added', summary: itemSummary, success: true });
-                    break;
-                
-                case 'unknown':
-                    hasExecutionErrors = true;
-                    executedOperationsInfo.push({ type: 'Unknown Operation', summary: operation.payload.error || 'Could not process.', success: false, error: operation.payload.error });
-                    break;
-                }
-            } catch (opError) {
-                hasExecutionErrors = true;
-                console.error(`Error executing AI operation ${operation.action}:`, opError);
-                executedOperationsInfo.push({ type: operation.action, summary: itemSummary || 'Failed operation', success: false, error: (opError as Error).message });
-            }
-        }
-    }
-    
-    let finalUserMessage = geminiResult.reply;
-    if (executedOperationsInfo.some(op => op.success)) {
-        const successfulOpsSummary = executedOperationsInfo.filter(op => op.success).map(op => `${op.type.replace(" Added", "")} '${op.summary.substring(0,20)}...'`).join(', ');
-        if (finalUserMessage.slice(-1) !== '.' && finalUserMessage.slice(-1) !== '!' && finalUserMessage.slice(-1) !== '?') {
-             finalUserMessage += ".";
-        }
-        finalUserMessage += ` I also processed these actions: ${successfulOpsSummary}.`;
-    }
-    if (hasExecutionErrors) {
-        const failedOpsSummary = executedOperationsInfo.filter(op => !op.success).map(op => `${op.type} failed: ${op.error}`).join(', ');
-        finalUserMessage += ` However, some actions failed: ${failedOpsSummary}.`;
-    }
-    
-    return NextResponse.json({ 
-        aiMessage: finalUserMessage.trim(), 
-        operations: geminiResult.operations,
-        executedOperationsLog: executedOperationsInfo,
-        originalInputParts: geminiResult.originalInputParts
-    }, { status: hasExecutionErrors && !executedOperationsInfo.some(i=>i.success && i.type !== 'Unknown Operation') ? 422 : 200 });
-
-  } catch (error) {
-    console.error('Error in AI command processing API:', error);
-    return NextResponse.json({ aiMessage: 'Failed to process AI command.', error: (error as Error).message, operations:[], executedOperationsLog: [] }, { status: 500 });
-  }
-}
 ```

@@ -160,7 +160,7 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
             dueDate: formData.dueDate,
             category: formData.category,
             recurrenceRule: formData.recurrenceRule,
-            subTasks: formData.subTasks, // Backend will assign IDs if new
+            subTasks: formData.subTasks, 
         });
         closeEditModal();
     }
@@ -185,7 +185,7 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
       const dateA = a.dueDate && isValidDateFn(parseISO(a.dueDate)) ? parseISO(a.dueDate).getTime() : Infinity;
       const dateB = b.dueDate && isValidDateFn(parseISO(b.dueDate)) ? parseISO(b.dueDate).getTime() : Infinity;
       if (dateA !== dateB) return dateA - dateB;
-      return (b.createdAt || '').localeCompare(a.createdAt || ''); // Fallback sort by creation time
+      return (b.createdAt || '').localeCompare(a.createdAt || ''); 
     });
 
   return (
@@ -201,7 +201,6 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
       </div>
 
       <div className="flex-grow overflow-y-auto bg-widget-background border border-border-main rounded-md p-6 custom-scrollbar-fullscreen space-y-6">
-        {/* Add Task Form */}
         <div className="space-y-3 p-4 bg-input-bg border border-border-main rounded-md">
           <Input
             type="text"
@@ -210,7 +209,6 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
             onChange={(e) => setNewTaskText(e.target.value)}
             className="input-field text-base p-3"
           />
-          {/* Subtasks for New Task */}
           <div className="pl-4 space-y-2">
             {newSubTasks.map((sub, index) => (
                 <div key={index} className="flex items-center gap-2">
@@ -303,7 +301,6 @@ export function TasksView({ tasks, categories, currentCategory, onAddTask, onTog
                      <Button variant="ghost" size="icon" onClick={() => onDeleteTask(task.id)} className="btn-icon danger w-7 h-7"><Trash2 className="w-4 h-4" /></Button>
                   </div>
                 </div>
-                {/* Display Subtasks */}
                 {task.subTasks && task.subTasks.length > 0 && (
                     <div className="pl-8 mt-2 space-y-1.5">
                         {task.subTasks.map(sub => (
@@ -350,9 +347,9 @@ interface EditTaskModalProps {
 function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps) {
     const [text, setText] = useState(task.text);
     const [dueDate, setDueDate] = useState(task.dueDate || '');
-    const [category, setCategory] = useState(task.category);
+    const [category, setCategory] = useState<Category>(task.category as Category); // Cast here assuming task.category from API is a valid specific category
     const [recurrenceRule, setRecurrenceRule] = useState<RecurrenceRule | undefined>(task.recurrenceRule);
-    const [subTasks, setSubTasks] = useState<SubTask[]>(task.subTasks ? JSON.parse(JSON.stringify(task.subTasks)) : []); // Deep copy
+    const [subTasks, setSubTasks] = useState<SubTask[]>(task.subTasks ? JSON.parse(JSON.stringify(task.subTasks)) : []); 
 
     const handleAddSubTask = () => setSubTasks([...subTasks, { id: uuidv4(), text: '', completed: false }]);
     const handleSubTaskTextChange = (id: string, newText: string) => {
@@ -365,7 +362,9 @@ function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps
 
     const handleSubmit = () => {
         if(text.trim()) {
-            onSave({ text: text.trim(), dueDate: dueDate || undefined, category, recurrenceRule, subTasks: subTasks.filter(st=> st.text.trim() !== '') });
+            // Ensure the category being saved is a valid Category type
+            const categoryToSave = categories.includes(category) ? category : (categories[0] || "Personal Life" as Category);
+            onSave({ text: text.trim(), dueDate: dueDate || undefined, category: categoryToSave, recurrenceRule, subTasks: subTasks.filter(st=> st.text.trim() !== '') });
         }
     };
 
@@ -414,5 +413,6 @@ function EditTaskModal({ task, categories, onClose, onSave }: EditTaskModalProps
         </div>
     );
 }
+
 
 
