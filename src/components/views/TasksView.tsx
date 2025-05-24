@@ -4,18 +4,18 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Task, Category, RecurrenceRule, SubTask, Goal } from '@/types'; // Added Goal
+import { Task, Category, RecurrenceRule, SubTask, Goal } from '@/types';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { X, Edit, Trash2, CalendarDays, PlusCircle, Repeat, ListPlus, CircleDot, Link2 } from 'lucide-react'; // Removed Link2Off
+import { X, Edit, Trash2, CalendarDays, PlusCircle, Repeat, ListPlus, CircleDot, Link2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { v4 as uuidv4 } from 'uuid';
 import { format, parseISO, isValid as isValidDateFn } from 'date-fns';
 
 const NO_GOAL_VALUE = "_NO_GOAL_LINKED_";
-const DISABLE_RECURRENCE_VALUE = "_DISABLE_RECURRENCE_"; // Unique value for disabling recurrence
+const DISABLE_RECURRENCE_VALUE = "_DISABLE_RECURRENCE_";
 
 interface TasksViewProps {
   tasks: Task[];
@@ -40,16 +40,23 @@ const RecurrenceEditor: React.FC<{
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   useEffect(() => {
+    setType(recurrence?.type || '');
+    setIntervalValue(recurrence?.interval || 1);
+    setDaysOfWeek(recurrence?.daysOfWeek || []);
+    setEndDate(recurrence?.endDate || '');
+  },[recurrence])
+
+  useEffect(() => {
     if (type && type !== DISABLE_RECURRENCE_VALUE && interval > 0) {
       const newRule: RecurrenceRule = { type: type as RecurrenceRule['type'], interval };
-      if (type === 'weekly' && daysOfWeek.length > 0) newRule.daysOfWeek = daysOfWeek;
+      if (type === 'weekly' && daysOfWeek.length > 0) newRule.daysOfWeek = daysOfWeek.sort((a,b)=> a-b);
       if (endDate) newRule.endDate = endDate;
       onChange(newRule);
     } else if (type === DISABLE_RECURRENCE_VALUE || type === '') {
       onChange(undefined);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [type, interval, daysOfWeek, endDate]); // onChange is stable due to useCallback in parent if used like that, or assumed stable here
+  }, [type, interval, daysOfWeek, endDate]); 
 
   const toggleDay = (dayIndex: number) => {
     setDaysOfWeek(prev => prev.includes(dayIndex) ? prev.filter(d => d !== dayIndex) : [...prev, dayIndex].sort());
@@ -63,14 +70,14 @@ const RecurrenceEditor: React.FC<{
     }
   };
 
-  if (!recurrence && type === '') {
-    return <Button variant="outline" onClick={() => setType('weekly')} className="input-field text-sm justify-start font-normal h-auto py-2.5"><Repeat className="w-3.5 h-3.5 mr-2 text-muted-foreground"/>Set Recurrence</Button>
+  if (!recurrence && type === '' && type !== DISABLE_RECURRENCE_VALUE) {
+    return <Button variant="outline" onClick={() => setType('weekly')} className="input-field text-xs sm:text-sm justify-start font-normal h-auto py-2 sm:py-2.5"><Repeat className="w-3 h-3 sm:w-3.5 sm:h-3.5 mr-2 text-muted-foreground"/>Set Recurrence</Button>
   }
   return (
-    <div className="space-y-3 p-3 border border-border-main rounded-md bg-input-bg/50">
+    <div className="space-y-2 sm:space-y-3 p-2 sm:p-3 border border-border-main rounded-md bg-input-bg/50">
       <div className="flex items-center justify-between">
         <p className="text-xs font-medium text-muted-foreground">Recurrence</p>
-        <Button variant="ghost" size="icon" className="w-6 h-6" onClick={() => { onChange(undefined); setType(DISABLE_RECURRENCE_VALUE); }}><X className="w-3.5 h-3.5"/></Button>
+        <Button variant="ghost" size="icon" className="w-5 h-5 sm:w-6 sm:h-6" onClick={() => { onChange(undefined); setType(DISABLE_RECURRENCE_VALUE); }}><X className="w-3 h-3 sm:w-3.5 sm:h-3.5"/></Button>
       </div>
       <Select value={type || DISABLE_RECURRENCE_VALUE} onValueChange={handleTypeChange}>
         <SelectTrigger className="input-field text-xs h-8"><SelectValue placeholder="Select type..."/></SelectTrigger>
@@ -113,11 +120,11 @@ export function TasksView({ tasks, goals, categories, currentCategory, onAddTask
   const [showCompleted, setShowCompleted] = useState(false);
 
   useEffect(() => {
-    if (currentCategory === "All Projects" && categories.length > 0) {
+    if (currentCategory === "All Projects" && categories.length > 0 && categories[0]) {
         setNewTaskCategory(categories[0]);
     } else if (categories.includes(currentCategory)) {
         setNewTaskCategory(currentCategory);
-    } else if (categories.length > 0) {
+    } else if (categories.length > 0 && categories[0]) {
         setNewTaskCategory(categories[0]);
     }
   }, [currentCategory, categories]);
@@ -129,9 +136,9 @@ export function TasksView({ tasks, goals, categories, currentCategory, onAddTask
     setNewSubTasks([]);
     setNewLinkedGoalId(undefined);
     setNewContributionValue(1);
-    if (currentCategory === "All Projects" && categories.length > 0) setNewTaskCategory(categories[0]);
+    if (currentCategory === "All Projects" && categories.length > 0 && categories[0]) setNewTaskCategory(categories[0]);
     else if (categories.includes(currentCategory)) setNewTaskCategory(currentCategory);
-    else if (categories.length > 0) setNewTaskCategory(categories[0]);
+    else if (categories.length > 0 && categories[0]) setNewTaskCategory(categories[0]);
   };
 
   const handleAddTask = () => {
@@ -187,39 +194,39 @@ export function TasksView({ tasks, goals, categories, currentCategory, onAddTask
     });
 
   return (
-    <div className={cn("fixed inset-0 z-[85] bg-background p-6 flex flex-col", "pt-[calc(5rem+2.75rem+1.5rem)]")}>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="font-orbitron text-3xl accent-text">Tasks</h2>
-        <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text p-2 rounded-md hover:bg-input-bg">
-          <X className="w-7 h-7" />
+    <div className={cn("fixed inset-0 z-[85] bg-background p-4 sm:p-6 flex flex-col", "pt-[calc(5rem+2.75rem+1rem)] sm:pt-[calc(5rem+2.75rem+1.5rem)]")}>
+      <div className="flex justify-between items-center mb-4 sm:mb-6">
+        <h2 className="font-orbitron text-2xl sm:text-3xl accent-text">Tasks</h2>
+        <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text p-1 sm:p-2 rounded-md hover:bg-input-bg">
+          <X className="w-6 sm:w-7 h-6 sm:h-7" />
         </Button>
       </div>
 
-      <div className="flex-grow overflow-y-auto bg-widget-background border border-border-main rounded-md p-6 custom-scrollbar-fullscreen space-y-6">
-        <div className="space-y-3 p-4 bg-input-bg border border-border-main rounded-md">
-          <Input type="text" placeholder="Add new task..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} className="input-field text-base p-3"/>
+      <div className="flex-grow overflow-y-auto bg-widget-background border border-border-main rounded-md p-4 sm:p-6 custom-scrollbar-fullscreen space-y-4 sm:space-y-6">
+        <div className="space-y-3 p-3 sm:p-4 bg-input-bg border border-border-main rounded-md">
+          <Input type="text" placeholder="Add new task..." value={newTaskText} onChange={(e) => setNewTaskText(e.target.value)} className="input-field text-base p-2 sm:p-3"/>
           <div className="pl-4 space-y-2">
             {newSubTasks.map((sub, index) => (
                 <div key={index} className="flex items-center gap-2">
                   <CircleDot className="w-3 h-3 text-muted-foreground/50 shrink-0"/>
-                  <Input value={sub.text} onChange={(e) => handleNewSubTaskChange(index, e.target.value)} placeholder="Sub-task description" className="input-field text-sm p-1.5 h-8 flex-grow"/>
-                  <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTaskFromNew(index)} className="w-7 h-7"><Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-destructive"/></Button>
+                  <Input value={sub.text} onChange={(e) => handleNewSubTaskChange(index, e.target.value)} placeholder="Sub-task description" className="input-field text-xs sm:text-sm p-1 sm:p-1.5 h-7 sm:h-8 flex-grow"/>
+                  <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTaskFromNew(index)} className="w-6 h-6 sm:w-7 sm:h-7"><Trash2 className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-muted-foreground hover:text-destructive"/></Button>
                 </div>
             ))}
-            <Button variant="outline" size="sm" onClick={handleAddSubTaskToNew} className="text-xs border-border-main hover:bg-widget-background"><ListPlus className="w-3 h-3 mr-1.5"/>Add sub-task</Button>
+            <Button variant="outline" size="sm" onClick={handleAddSubTaskToNew} className="text-xs border-border-main hover:bg-widget-background h-7 px-2"><ListPlus className="w-3 h-3 mr-1.5"/>Add sub-task</Button>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-2 gap-3 items-end pt-2">
-            <Input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className="input-field text-sm h-auto py-2.5" title="Due Date"/>
-            <Select value={newTaskCategory} onValueChange={(val) => setNewTaskCategory(val as Category)}>
-              <SelectTrigger className="input-field text-sm h-auto py-2.5"><SelectValue placeholder="Category" /></SelectTrigger>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-end pt-2">
+            <Input type="date" value={newTaskDueDate} onChange={(e) => setNewTaskDueDate(e.target.value)} className="input-field text-xs sm:text-sm h-auto py-2 sm:py-2.5" title="Due Date"/>
+            <Select value={newTaskCategory || (categories.length > 0 ? categories[0] : '')} onValueChange={(val) => setNewTaskCategory(val as Category)}>
+              <SelectTrigger className="input-field text-xs sm:text-sm h-auto py-2 sm:py-2.5"><SelectValue placeholder="Category" /></SelectTrigger>
               <SelectContent className="bg-widget-background border-border-main text-text-main">
                 {categories.map(cat => <SelectItem key={cat} value={cat} className="hover:!bg-[rgba(0,220,255,0.1)] focus:!bg-[rgba(0,220,255,0.1)]">{cat}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center pt-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-center pt-2">
             <Select value={newLinkedGoalId || NO_GOAL_VALUE} onValueChange={(val) => setNewLinkedGoalId(val === NO_GOAL_VALUE ? undefined : val)}>
-                <SelectTrigger className="input-field text-sm h-auto py-2.5">
+                <SelectTrigger className="input-field text-xs sm:text-sm h-auto py-2 sm:py-2.5">
                     <SelectValue placeholder="Link to Goal (Optional)" />
                 </SelectTrigger>
                 <SelectContent className="bg-widget-background border-border-main text-text-main">
@@ -228,11 +235,11 @@ export function TasksView({ tasks, goals, categories, currentCategory, onAddTask
                 </SelectContent>
             </Select>
             {newLinkedGoalId && (
-                <Input type="number" placeholder="Contribution Value" value={newContributionValue} onChange={(e) => setNewContributionValue(parseInt(e.target.value) || 1)} className="input-field text-sm h-auto py-2.5" min="0" />
+                <Input type="number" placeholder="Contribution Value" value={newContributionValue} onChange={(e) => setNewContributionValue(parseInt(e.target.value) || 1)} className="input-field text-xs sm:text-sm h-auto py-2 sm:py-2.5" min="0" />
             )}
           </div>
           <RecurrenceEditor recurrence={newRecurrenceRule} onChange={setNewRecurrenceRule} />
-          <Button onClick={handleAddTask} className="btn-primary w-full mt-3 text-sm h-auto py-2.5"><PlusCircle className="w-4 h-4 mr-2"/> Add Task</Button>
+          <Button onClick={handleAddTask} className="btn-primary w-full mt-3 text-sm h-auto py-2 sm:py-2.5"><PlusCircle className="w-4 h-4 mr-2"/> Add Task</Button>
         </div>
 
         <div className="flex justify-end items-center">
@@ -241,34 +248,34 @@ export function TasksView({ tasks, goals, categories, currentCategory, onAddTask
             </label>
         </div>
 
-        <ul className="space-y-2.5">
+        <ul className="space-y-2 sm:space-y-2.5">
           {filteredTasks.map(task => {
             const linkedGoalName = task.linkedGoalId ? goals.find(g => g.id === task.linkedGoalId)?.name : null;
             return (
-            <li key={task.id} className={cn("bg-input-bg border border-border-main rounded-md p-3", task.completed && "opacity-60")}>
+            <li key={task.id} className={cn("bg-input-bg border border-border-main rounded-md p-2.5 sm:p-3", task.completed && "opacity-60")}>
                 <div className="flex justify-between items-start">
                     <div className="flex items-start flex-grow min-w-0">
-                        <Checkbox id={`task-fs-${task.id}`} checked={task.completed} onCheckedChange={() => onToggleTask(task.id)} className="form-checkbox h-5 w-5 shrink-0 mt-0.5 mr-3 border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"/>
+                        <Checkbox id={`task-fs-${task.id}`} checked={task.completed} onCheckedChange={() => onToggleTask(task.id)} className="form-checkbox h-4 w-4 sm:h-5 sm:w-5 shrink-0 mt-0.5 mr-2 sm:mr-3 border-muted-foreground data-[state=checked]:bg-primary data-[state=checked]:border-primary data-[state=checked]:text-primary-foreground"/>
                         <div className="flex-grow">
-                            <span className={cn("text-base block", task.completed && "line-through")}>{task.text}</span>
-                            <p className="text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-2 gap-y-0.5">
+                            <span className={cn("text-sm sm:text-base block", task.completed && "line-through")}>{task.text}</span>
+                            <p className="text-[10px] sm:text-xs text-muted-foreground mt-0.5 flex items-center flex-wrap gap-x-1.5 sm:gap-x-2 gap-y-0.5">
                                 <span>{task.category}</span>
-                                {task.dueDate && isValidDateFn(parseISO(task.dueDate)) && (<><span className="text-muted-foreground/50">•</span><span className="flex items-center"><CalendarDays className="w-3 h-3 inline mr-1" />{format(parseISO(task.dueDate), 'MMM d, yyyy')}</span></>)}
-                                {task.recurrenceRule && (<><span className="text-muted-foreground/50">•</span><span className="flex items-center"><Repeat className="w-3 h-3 inline mr-1" />{task.recurrenceRule.type}</span></>)}
-                                {linkedGoalName && (<><span className="text-muted-foreground/50">•</span><span className="flex items-center text-primary/80"><Link2 className="w-3 h-3 inline mr-1" />{linkedGoalName} (+{task.contributionValue || 0})</span></>)}
+                                {task.dueDate && isValidDateFn(parseISO(task.dueDate)) && (<><span className="text-muted-foreground/50">•</span><span className="flex items-center"><CalendarDays className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mr-1" />{format(parseISO(task.dueDate), 'MMM d, yyyy')}</span></>)}
+                                {task.recurrenceRule && (<><span className="text-muted-foreground/50">•</span><span className="flex items-center"><Repeat className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mr-1" />{task.recurrenceRule.type}</span></>)}
+                                {linkedGoalName && (<><span className="text-muted-foreground/50">•</span><span className="flex items-center text-primary/80"><Link2 className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mr-1" />{linkedGoalName} (+{task.contributionValue || 0})</span></>)}
                             </p>
                         </div>
                   </div>
-                  <div className="flex items-center space-x-0.5 shrink-0 ml-2">
-                     <Button variant="ghost" size="icon" onClick={() => openEditModal(task)} className="btn-icon w-7 h-7"><Edit className="w-4 h-4" /></Button>
-                     <Button variant="ghost" size="icon" onClick={() => onDeleteTask(task.id)} className="btn-icon danger w-7 h-7"><Trash2 className="w-4 h-4" /></Button>
+                  <div className="flex items-center space-x-0 sm:space-x-0.5 shrink-0 ml-1 sm:ml-2">
+                     <Button variant="ghost" size="icon" onClick={() => openEditModal(task)} className="btn-icon w-6 h-6 sm:w-7 sm:h-7"><Edit className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></Button>
+                     <Button variant="ghost" size="icon" onClick={() => onDeleteTask(task.id)} className="btn-icon danger w-6 h-6 sm:w-7 sm:h-7"><Trash2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></Button>
                   </div>
                 </div>
                 {task.subTasks && task.subTasks.length > 0 && (
-                    <div className="pl-8 mt-2 space-y-1.5">
+                    <div className="pl-6 sm:pl-8 mt-1.5 sm:mt-2 space-y-1 sm:space-y-1.5">
                         {task.subTasks.map(sub => (
-                            <div key={sub.id} className="flex items-center text-sm">
-                                <Checkbox id={`subtask-fs-${task.id}-${sub.id}`} checked={sub.completed} onCheckedChange={() => onToggleTask(task.id, sub.id)} className="h-4 w-4 mr-2 border-muted-foreground data-[state=checked]:bg-primary/70 data-[state=checked]:border-primary/70 data-[state=checked]:text-primary-foreground"/>
+                            <div key={sub.id} className="flex items-center text-xs sm:text-sm">
+                                <Checkbox id={`subtask-fs-${task.id}-${sub.id}`} checked={sub.completed} onCheckedChange={() => onToggleTask(task.id, sub.id)} className="h-3.5 w-3.5 mr-2 border-muted-foreground data-[state=checked]:bg-primary/70 data-[state=checked]:border-primary/70 data-[state=checked]:text-primary-foreground"/>
                                 <label htmlFor={`subtask-fs-${task.id}-${sub.id}`} className={cn("flex-grow cursor-pointer", sub.completed && "line-through text-muted-foreground")}>{sub.text}</label>
                             </div>
                         ))}
@@ -276,7 +283,7 @@ export function TasksView({ tasks, goals, categories, currentCategory, onAddTask
                 )}
             </li>
           )})}
-           {filteredTasks.length === 0 && (<p className="text-center text-muted-foreground py-10">{showCompleted ? "No tasks here." : "No active tasks. Way to go!"}</p>)}
+           {filteredTasks.length === 0 && (<p className="text-center text-muted-foreground py-10 text-sm sm:text-base">{showCompleted ? "No tasks here." : "No active tasks. Way to go!"}</p>)}
         </ul>
       </div>
       {isEditModalOpen && editingTask && (<EditTaskModal task={editingTask} goals={goals} categories={categories} onClose={closeEditModal} onSave={handleSaveEditedTask} />)}
@@ -308,62 +315,65 @@ function EditTaskModal({ task, goals, categories, onClose, onSave }: EditTaskMod
 
     const handleSubmit = () => {
         if(text.trim()) {
-            const categoryToSave = categories.includes(category) ? category : (categories[0] || "Personal Life" as Category);
+            const categoryToSave = categories.includes(category) && category ? category : (categories[0] || "Personal Life" as Category);
             onSave({ text: text.trim(), dueDate: dueDate || undefined, category: categoryToSave, recurrenceRule, subTasks: subTasks.filter(st=> st.text.trim() !== ''), linkedGoalId, contributionValue: linkedGoalId ? contributionValue : undefined });
         }
     };
 
     return (
-        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-[110]" onClick={onClose}>
-            <div className="bg-widget-background border border-border-main rounded-lg p-6 w-full max-w-lg shadow-2xl space-y-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
-                <div className="flex justify-between items-center pb-3 border-b border-border-main">
-                    <h3 className="font-orbitron text-xl accent-text">Edit Task</h3>
-                    <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text"><X className="w-5 h-5"/></Button>
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-[110] p-4" onClick={onClose}>
+            <div className="bg-widget-background border border-border-main rounded-lg p-4 sm:p-6 w-full max-w-md sm:max-w-lg shadow-2xl space-y-3 sm:space-y-4 max-h-[90vh] flex flex-col" onClick={e => e.stopPropagation()}>
+                <div className="flex justify-between items-center pb-2 sm:pb-3 border-b border-border-main">
+                    <h3 className="font-orbitron text-lg sm:text-xl accent-text">Edit Task</h3>
+                    <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text"><X className="w-4 h-4 sm:w-5 sm:h-5"/></Button>
                 </div>
 
-                <div className="flex-grow overflow-y-auto space-y-4 pr-2 custom-scrollbar-fullscreen">
-                    <label className="text-xs font-medium text-muted-foreground">Task Description</label>
-                    <Input value={text} onChange={e => setText(e.target.value)} placeholder="Task description" className="input-field p-3"/>
+                <div className="flex-grow overflow-y-auto space-y-3 sm:space-y-4 pr-1 sm:pr-2 custom-scrollbar-fullscreen">
+                    <div>
+                        <label className="text-xs font-medium text-muted-foreground">Task Description</label>
+                        <Input value={text} onChange={e => setText(e.target.value)} placeholder="Task description" className="input-field p-2 sm:p-3 text-sm sm:text-base mt-1"/>
+                    </div>
                     <div className="space-y-1">
                         <label className="text-xs font-medium text-muted-foreground">Sub-tasks</label>
                         {subTasks.map((sub) => (
                         <div key={sub.id} className="flex items-center gap-2">
                             <Checkbox id={`edit-sub-${sub.id}`} checked={sub.completed} onCheckedChange={() => handleSubTaskToggle(sub.id)} className="h-4 w-4 border-muted-foreground"/>
-                            <Input value={sub.text} onChange={e => handleSubTaskTextChange(sub.id, e.target.value)} className="input-field flex-grow text-sm p-1 h-8" placeholder="Sub-task description"/>
-                            <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTask(sub.id)} className="h-7 w-7"><Trash2 className="h-3.5 w-3.5 text-muted-foreground hover:text-destructive"/></Button>
+                            <Input value={sub.text} onChange={e => handleSubTaskTextChange(sub.id, e.target.value)} className="input-field flex-grow text-xs sm:text-sm p-1 h-7 sm:h-8" placeholder="Sub-task description"/>
+                            <Button variant="ghost" size="icon" onClick={() => handleRemoveSubTask(sub.id)} className="h-6 w-6 sm:h-7 sm:w-7"><Trash2 className="h-3 w-3 sm:h-3.5 sm:h-3.5 text-muted-foreground hover:text-destructive"/></Button>
                         </div>
                         ))}
-                        <Button variant="outline" size="sm" onClick={handleAddSubTask} className="text-xs border-border-main hover:bg-input-bg"><ListPlus className="w-3 h-3 mr-1.5"/>Add sub-task</Button>
+                        <Button variant="outline" size="sm" onClick={handleAddSubTask} className="text-xs border-border-main hover:bg-input-bg h-7 px-2"><ListPlus className="w-3 h-3 mr-1.5"/>Add sub-task</Button>
                     </div>
-
-                    <label className="text-xs font-medium text-muted-foreground">Details</label>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field p-3 h-auto" title="Due Date"/>
-                        <Select value={category} onValueChange={val => setCategory(val as Category)}>
-                            <SelectTrigger className="input-field p-3 h-auto"><SelectValue/></SelectTrigger>
-                            <SelectContent className="bg-widget-background border-border-main">
-                                {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
-                            </SelectContent>
-                        </Select>
+                    <div>
+                        <label className="text-xs font-medium text-muted-foreground">Details</label>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 mt-1">
+                            <Input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="input-field p-2 sm:p-3 h-auto text-xs sm:text-sm" title="Due Date"/>
+                            <Select value={category} onValueChange={val => setCategory(val as Category)}>
+                                <SelectTrigger className="input-field p-2 sm:p-3 h-auto text-xs sm:text-sm"><SelectValue/></SelectTrigger>
+                                <SelectContent className="bg-widget-background border-border-main">
+                                    {categories.map(cat => <SelectItem key={cat} value={cat}>{cat}</SelectItem>)}
+                                </SelectContent>
+                            </Select>
+                        </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-center">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-3 items-center">
                         <Select value={linkedGoalId || NO_GOAL_VALUE} onValueChange={(val) => setLinkedGoalId(val === NO_GOAL_VALUE ? undefined : val)}>
-                            <SelectTrigger className="input-field text-sm h-auto py-2.5"> <SelectValue placeholder="Link to Goal (Optional)" /></SelectTrigger>
+                            <SelectTrigger className="input-field text-xs sm:text-sm h-auto py-2 sm:py-2.5"> <SelectValue placeholder="Link to Goal (Optional)" /></SelectTrigger>
                             <SelectContent className="bg-widget-background border-border-main text-text-main">
                                 <SelectItem value={NO_GOAL_VALUE} className="text-muted-foreground">No Linked Goal</SelectItem>
                                 {goals.filter(g => g.id === task.linkedGoalId || g.targetValue > (g.currentValue || 0)).map(goal => <SelectItem key={goal.id} value={goal.id}>{goal.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         {linkedGoalId && (
-                             <Input type="number" placeholder="Contribution" title="Contribution Value" value={contributionValue} onChange={(e) => setContributionValue(parseInt(e.target.value) || 0)} className="input-field text-sm h-auto py-2.5" min="0" />
+                             <Input type="number" placeholder="Contribution" title="Contribution Value" value={contributionValue} onChange={(e) => setContributionValue(parseInt(e.target.value) || 0)} className="input-field text-xs sm:text-sm h-auto py-2 sm:py-2.5" min="0" />
                         )}
                     </div>
                     <RecurrenceEditor recurrence={recurrenceRule} onChange={setRecurrenceRule}/>
                 </div>
 
-                <div className="flex justify-end pt-4 border-t border-border-main space-x-2 shrink-0">
-                    <Button variant="outline" onClick={onClose} className="border-border-main text-muted-foreground hover:bg-input-bg">Cancel</Button>
-                    <Button onClick={handleSubmit} className="btn-primary">Save Changes</Button>
+                <div className="flex justify-end pt-3 sm:pt-4 border-t border-border-main space-x-2 shrink-0">
+                    <Button variant="outline" onClick={onClose} className="border-border-main text-muted-foreground hover:bg-input-bg text-xs sm:text-sm">Cancel</Button>
+                    <Button onClick={handleSubmit} className="btn-primary text-xs sm:text-sm">Save Changes</Button>
                 </div>
             </div>
         </div>

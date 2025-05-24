@@ -1,3 +1,6 @@
+// FULL, COMPLETE, READY-TO-RUN CODE ONLY.
+// NO SNIPPETS. NO PLACEHOLDERS. NO INCOMPLETE SECTIONS.
+// CODE MUST BE ABLE TO RUN IMMEDIATELY WITHOUT MODIFICATION.
 "use client";
 
 import React, { useState, useEffect, useCallback } from 'react';
@@ -5,7 +8,6 @@ import { useSession } from 'next-auth/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'; 
 
 import { Header } from '@/components/layout/Header';
-// ProjectSelectorBar import removed
 import { FooterChat } from '@/components/layout/FooterChat';
 import { AiAssistantWidget, ExecutedOperationInfo, AiChatMessage as AiChatMessageImport } from '@/components/dashboard/AiAssistantWidget';
 import { TasksWidget } from '@/components/dashboard/TasksWidget';
@@ -25,7 +27,7 @@ import type { Part, Content } from '@google/generative-ai';
 import type { InteractionMode } from '@/lib/gemini';
 
 
-const DEFAULT_PROJECTS: Omit<Project, 'userId'>[] = [ // Omit userId, will be added based on session or 'system'
+const DEFAULT_PROJECTS: Omit<Project, 'userId'>[] = [
     { id: 'default_personal', name: 'Personal Life', createdAt: new Date().toISOString() },
     { id: 'default_work', name: 'Work', createdAt: new Date().toISOString() },
     { id: 'default_studies', name: 'Studies', createdAt: new Date().toISOString() },
@@ -62,6 +64,15 @@ export default function HomePageContent() {
   const [currentFooterChatMessage, setCurrentFooterChatMessage] = useState('');
   const [isProjectModalOpen, setIsProjectModalOpen] = useState(false);
 
+  // PWA Service Worker Registration
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator && window.workbox !== undefined) {
+      navigator.serviceWorker.register('/sw.js')
+        .then(registration => console.log('Service Worker registered with scope:', registration.scope))
+        .catch(error => console.log('Service Worker registration failed:', error));
+    }
+  }, []);
+
 
   const fetchProjects = useCallback(async () => {
     if (status !== "authenticated" || !typedSessionUser?.id) return;
@@ -76,7 +87,7 @@ export default function HomePageContent() {
               const addRes = await fetch('/api/projects', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ name: defaultProject.name }), // API will assign userId
+                body: JSON.stringify({ name: defaultProject.name }),
               });
               if (addRes.ok) {
                 createdDefaults.push(await addRes.json());
@@ -560,8 +571,10 @@ export default function HomePageContent() {
       events: events.filter(e => currentProjectName === "All Projects" || e.category === currentProjectName),
     };
     return (
+        // Mobile: Single column grid. Desktop: 4 columns.
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 md:gap-6 h-full">
-          <div className="lg:row-span-2 flex flex-col gap-5 md:gap-6">
+          {/* Column 1: AI and Tasks - Takes full width on mobile, specific spans on larger screens */}
+          <div className="md:col-span-1 lg:col-span-1 lg:row-span-2 flex flex-col gap-5 md:gap-6">
             <AiAssistantWidget 
                 initialMessage={aiMessageForCollapsedWidget}
                 isChatModeActive={false} 
@@ -573,10 +586,11 @@ export default function HomePageContent() {
                 tasks={dashboardDataProps.tasks} 
                 onTaskToggle={handleToggleTask} 
                 onNavigate={() => { setViewMode('tasks'); router.push('/?view=tasks', { scroll: false }); }}
-                className="flex-grow"
+                className="flex-grow" // Ensures it takes available space in the flex column
             />
           </div>
-          <div className="flex flex-col space-y-5 md:space-y-6">
+          {/* Column 2: Calendar and Due Soon */}
+          <div className="md:col-span-1 lg:col-span-1 flex flex-col space-y-5 md:space-y-6">
             <CalendarWidget events={dashboardDataProps.events} onNavigate={() => { setViewMode('calendar'); router.push('/?view=calendar', { scroll: false }); }} />
             <DueSoonWidget 
                 tasks={tasks} 
@@ -585,11 +599,17 @@ export default function HomePageContent() {
                 onNavigateToItem={navigateToItemHandler}
             />
           </div>
-          <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => { setViewMode('goals'); router.push('/?view=goals', { scroll: false }); }} />
-          <QuickNotesWidget 
-            notes={dashboardDataProps.notes} 
-            onNavigate={() => navigateToNotesView()} 
-           />
+          {/* Column 3: Goals */}
+          <div className="md:col-span-1 lg:col-span-1">
+            <GoalsWidget goals={dashboardDataProps.goals} onNavigate={() => { setViewMode('goals'); router.push('/?view=goals', { scroll: false }); }} />
+          </div>
+          {/* Column 4: Quick Notes */}
+          <div className="md:col-span-1 lg:col-span-1">
+            <QuickNotesWidget 
+              notes={dashboardDataProps.notes} 
+              onNavigate={() => navigateToNotesView()} 
+            />
+          </div>
         </div>
     );
   }
@@ -621,7 +641,7 @@ export default function HomePageContent() {
     
     if (isAiChatModeActive) {
         return (
-            <div className="h-full w-full max-w-4xl mx-auto">
+            <div className="h-full w-full max-w-4xl mx-auto"> {/* Max width for chat view */}
                 <AiAssistantWidget
                     initialMessage={null}
                     isChatModeActive={true}
@@ -685,16 +705,18 @@ export default function HomePageContent() {
   if (isAiChatModeActive) {
     mainPaddingTop = "pt-[5rem]"; 
   } else if (!isFullScreenViewActive) { 
-     mainPaddingTop = "pt-[calc(5rem+1rem)]"; 
+     mainPaddingTop = "pt-[calc(5rem+1rem)]"; // Header + gap for non-fullscreen views
   }
   
-  let mainHeightCss = 'calc(100vh - 5rem - 70px)'; 
-  if (isFullScreenViewActive) {
-    mainHeightCss = 'calc(100vh - 5rem - 70px)'; 
-  } else if (!isAiChatModeActive) { 
-    mainHeightCss = 'calc(100vh - 5rem - 70px - 1rem)';
+  // Adjust main height considering the footer chat bar (~70px height with padding)
+  let mainHeightCss = 'calc(100vh - 5rem)'; // Base: viewport height - header height
+  if (showFooterChat) {
+    mainHeightCss = `calc(100vh - 5rem - ${isAiChatModeActive ? '70px' : '86px'})`; // header + footer + potential gap for dashboard
   }
-  
+   if (!isFullScreenViewActive && !isAiChatModeActive) { // Dashboard view with project selector bar space
+    mainHeightCss = `calc(100vh - 5rem - 86px - 1rem)`; // Header + Footer + TopGap
+  }
+
   const availableProjectsForHeaderDropdown = [{id: 'all-projects-pseudo-id', userId: typedSessionUser?.id || 'system', name: "All Projects", createdAt: new Date().toISOString()}, ...projects];
 
 
@@ -709,8 +731,8 @@ export default function HomePageContent() {
       <main 
         className={cn(
             "flex-grow overflow-y-auto custom-scrollbar-fullscreen", 
-            isAiChatModeActive && "flex justify-center", 
-            (isFullScreenViewActive || isAiChatModeActive) ? "p-0" : "px-6 pb-6", 
+            isAiChatModeActive && "flex justify-center", // Center chat view content
+            (isFullScreenViewActive || isAiChatModeActive) ? "p-0" : "px-4 sm:px-6 pb-6", // Padding for dashboard
             mainPaddingTop
         )}
         style={{ height: mainHeightCss }}

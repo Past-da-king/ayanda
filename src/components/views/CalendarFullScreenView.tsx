@@ -1,3 +1,6 @@
+// FULL, COMPLETE, READY-TO-RUN CODE ONLY.
+// NO SNIPPETS. NO PLACEHOLDERS. NO INCOMPLETE SECTIONS.
+// CODE MUST BE ABLE TO RUN IMMEDIATELY WITHOUT MODIFICATION.
 "use client";
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
@@ -311,7 +314,7 @@ export function CalendarFullScreenView({
 
     if (rule.endDate && checkDate > startOfDay(parseISO(rule.endDate))) return null;
 
-    for(let i=0; i< 365; i++) {
+    for(let i=0; i< 365; i++) { // Limit search to avoid infinite loops for misconfigured rules
         let currentIterDate: Date;
         switch(rule.type) {
             case 'daily':
@@ -321,30 +324,32 @@ export function CalendarFullScreenView({
                 currentIterDate = add(baseDate, { weeks: rule.interval * i });
                 if (rule.daysOfWeek && rule.daysOfWeek.length > 0) {
                     const baseDayOfWeek = currentIterDate.getDay();
-                    const targetDayInWeek = rule.daysOfWeek.find(d => d >= baseDayOfWeek);
-                    if (targetDayInWeek !== undefined) {
-                        currentIterDate = add(currentIterDate, { days: targetDayInWeek - baseDayOfWeek });
-                    } else {
-                        currentIterDate = add(baseDate, { weeks: rule.interval * (i + 1) });
-                        currentIterDate = add(currentIterDate, { days: rule.daysOfWeek[0] - currentIterDate.getDay() });
+                    // Find the next valid day in this week or the start of the next interval's week
+                    let dayOffset = Infinity;
+                    for (const dow of rule.daysOfWeek) {
+                        if (dow >= baseDayOfWeek) {
+                            dayOffset = Math.min(dayOffset, dow - baseDayOfWeek);
+                        } else { // Day has passed in the current week iteration, check for next week
+                           dayOffset = Math.min(dayOffset, (dow - baseDayOfWeek) + 7);
+                        }
                     }
+                     if(dayOffset !== Infinity) currentIterDate = add(currentIterDate, { days: dayOffset });
                 }
                 break;
             case 'monthly':
                 currentIterDate = add(baseDate, { months: rule.interval * i});
+                // Adjust day if it exceeds the number of days in the target month
                 if (currentIterDate.getDate() !== baseDate.getDate()) {
                     const lastDayOfMonth = new Date(currentIterDate.getFullYear(), currentIterDate.getMonth() + 1, 0).getDate();
-                    if (baseDate.getDate() > lastDayOfMonth) {
-                        currentIterDate.setDate(lastDayOfMonth);
-                    } else {
-                         currentIterDate.setDate(baseDate.getDate());
-                    }
+                    currentIterDate.setDate(Math.min(baseDate.getDate(), lastDayOfMonth));
                 }
                 break;
             case 'yearly':
                 currentIterDate = add(baseDate, { years: rule.interval * i});
+                // Ensure month and day match, e.g. for Feb 29 on non-leap years
                 if (currentIterDate.getMonth() !== baseDate.getMonth() || currentIterDate.getDate() !== baseDate.getDate()) {
-                    currentIterDate = new Date(currentIterDate.getFullYear(), baseDate.getMonth(), baseDate.getDate());
+                     const targetMonthDays = new Date(currentIterDate.getFullYear(), baseDate.getMonth() + 1, 0).getDate();
+                     currentIterDate = new Date(currentIterDate.getFullYear(), baseDate.getMonth(), Math.min(baseDate.getDate(), targetMonthDays));
                 }
                 break;
             default: return null;
@@ -370,15 +375,16 @@ export function CalendarFullScreenView({
       }
       if (event.recurrenceRule) {
         const next = getNextOccurrence(event, dayStart);
-        if (next && isSameDay(next, dayStart) && !isSameDay(eventBaseDate, dayStart)) {
+        if (next && isSameDay(next, dayStart) && !isSameDay(eventBaseDate, dayStart)) { // Only add if it's a recurring instance not the original
           results.push({
-            ...event,
-            date: format(dayStart, 'yyyy-MM-dd') + 'T' + format(parseISO(event.date), 'HH:mm:ss.SSS') + 'Z',
+            ...event, // Spread original event to keep its ID
+            date: format(dayStart, 'yyyy-MM-dd') + 'T' + format(parseISO(event.date), 'HH:mm:ss.SSS') + 'Z', // Set date to the current recurring day but keep original time
           });
         }
       }
       return results;
-    }).filter((event, index, self) => index === self.findIndex((e) => e.id === event.id && e.date === event.date));
+    }) // Deduplicate events by ID if the original and a recurrence fall on the same day
+    .filter((event, index, self) => index === self.findIndex((e) => e.id === event.id ));
   };
 
 
@@ -397,7 +403,10 @@ export function CalendarFullScreenView({
             {firstEventTitle}
           </span>
         )}
-        {hasEvent && (
+        {dayEvents.length > 1 && ( // Show a small indicator for multiple events
+           <span className="absolute top-1 right-1 text-[8px] bg-accent text-accent-foreground rounded-full w-3 h-3 flex items-center justify-center">{dayEvents.length}</span>
+        )}
+         {hasEvent && ! (dayEvents.length > 1) && ( // Dot for single event
           <span className={cn(
               "absolute bottom-1 left-1/2 -translate-x-1/2 size-1.5 rounded-full bg-primary opacity-70"
           )} />
@@ -412,23 +421,26 @@ export function CalendarFullScreenView({
 
   return (
     <div className={cn(
-        "fixed inset-0 z-[85] bg-background p-6 flex flex-col",
-        "pt-[calc(5rem+2.75rem+1.5rem)]"
+        "fixed inset-0 z-[85] bg-background p-4 sm:p-6 flex flex-col", // Responsive padding
+        "pt-[calc(5rem+2.75rem+1rem)] sm:pt-[calc(5rem+2.75rem+1.5rem)]" // Responsive top padding
     )}>
-        <div className="flex justify-between items-center mb-6">
-            <h2 className="font-orbitron text-3xl accent-text">Calendar</h2>
-            <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text p-2 rounded-md hover:bg-input-bg">
-                <X className="w-7 h-7" />
+        <div className="flex justify-between items-center mb-4 sm:mb-6">
+            <h2 className="font-orbitron text-2xl sm:text-3xl accent-text">Calendar</h2>
+            <Button variant="ghost" size="icon" onClick={onClose} className="text-muted-foreground hover:accent-text p-1 sm:p-2 rounded-md hover:bg-input-bg">
+                <X className="w-6 sm:w-7 h-6 sm:h-7" />
             </Button>
         </div>
 
-        <div className="flex-grow flex gap-6 overflow-hidden">
-            <div className="w-2/3 lg:w-3/4 bg-widget-background border border-border-main rounded-md p-6 flex flex-col items-center justify-start custom-scrollbar-fullscreen">
+        {/* Layout for mobile: stack calendar and details. Desktop: side-by-side */}
+        <div className="flex-grow flex flex-col md:flex-row gap-4 sm:gap-6 overflow-hidden">
+            {/* Calendar Panel - takes full width on mobile, specific width on md+ */}
+            <div className="w-full md:w-2/3 lg:w-3/4 bg-widget-background border border-border-main rounded-md p-2 sm:p-4 md:p-6 flex flex-col items-center justify-start custom-scrollbar-fullscreen overflow-y-auto md:overflow-y-visible">
                 <Calendar
                     mode="single"
                     selected={selectedDate}
                     onSelect={(day) => {
                         setSelectedDate(day);
+                         if (day) setShowEventForm(false); // Close form when a new day is selected
                     }}
                     month={viewMonth}
                     onMonthChange={(month) => {
@@ -440,10 +452,10 @@ export function CalendarFullScreenView({
                         months: "flex flex-col sm:flex-row space-y-4 sm:space-x-4 sm:space-y-0",
                         month: "space-y-4 w-full",
                         caption: "flex justify-center pt-1 relative items-center h-10 mb-2",
-                        caption_label: "text-xl font-orbitron accent-text",
+                        caption_label: "text-lg sm:text-xl font-orbitron accent-text",
                         nav: "space-x-1 flex items-center",
                         nav_button: cn(
-                            "h-8 w-8 bg-transparent p-0 opacity-80 hover:opacity-100",
+                            "h-7 w-7 sm:h-8 sm:w-8 bg-transparent p-0 opacity-80 hover:opacity-100",
                             "rounded-md hover:bg-accent/20 text-muted-foreground hover:text-accent-foreground transition-colors",
                             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                         ),
@@ -451,10 +463,10 @@ export function CalendarFullScreenView({
                         nav_button_next: "absolute right-1",
                         table: "w-full border-collapse space-y-1",
                         head_row: "flex w-full mb-1",
-                        head_cell: "text-muted-foreground rounded-md w-[14.28%] text-xs font-medium p-1 h-8 justify-center",
-                        row: "flex w-full mt-2",
+                        head_cell: "text-muted-foreground rounded-md w-[14.28%] text-[10px] sm:text-xs font-medium p-1 h-8 justify-center",
+                        row: "flex w-full mt-1 sm:mt-2", // Responsive row margin
                         cell: cn(
-                            "text-center text-sm p-0 relative w-[14.28%] h-20 sm:h-24 focus-within:relative focus-within:z-20",
+                            "text-center text-sm p-0 relative w-[14.28%] h-16 sm:h-20 md:h-24 focus-within:relative focus-within:z-20", // Responsive cell height
                         ),
                         day: cn(
                             "w-full h-full p-0 font-normal rounded-md",
@@ -468,8 +480,8 @@ export function CalendarFullScreenView({
                         day_disabled: "text-muted-foreground opacity-50 pointer-events-none",
                     }}
                     components={{
-                        IconLeft: ({ ...props }) => <ChevronLeft {...props} className="h-5 w-5" />,
-                        IconRight: ({ ...props }) => <ChevronRight {...props} className="h-5 w-5" />,
+                        IconLeft: ({ ...props }) => <ChevronLeft {...props} className="h-4 w-4 sm:h-5 sm:w-5" />,
+                        IconRight: ({ ...props }) => <ChevronRight {...props} className="h-4 w-4 sm:h-5 sm:w-5" />,
                     }}
                     formatters={{ formatDay: DayCellContent }}
                     showOutsideDays
@@ -477,21 +489,22 @@ export function CalendarFullScreenView({
                 />
             </div>
 
-            <div className="w-1/3 lg:w-1/4 bg-widget-background border border-border-main rounded-md p-4 flex flex-col space-y-4 overflow-y-auto custom-scrollbar-fullscreen">
-                <Button onClick={handleShowNewEventForm} className="w-full btn-primary">
+            {/* Details/Form Panel - takes full width on mobile, specific width on md+ */}
+            <div className="w-full md:w-1/3 lg:w-1/4 bg-widget-background border border-border-main rounded-md p-3 sm:p-4 flex flex-col space-y-3 sm:space-y-4 overflow-y-auto custom-scrollbar-fullscreen">
+                <Button onClick={handleShowNewEventForm} className="w-full btn-primary text-sm sm:text-base">
                     <PlusCircle className="w-4 h-4 mr-2"/> Add Event
                 </Button>
 
                 {showEventForm && (
                     <div className="p-3 border border-border-main rounded-md bg-input-bg/70 space-y-3">
-                        <h3 className="font-orbitron text-lg accent-text">{editingEvent ? 'Edit Event' : 'New Event'}</h3>
-                        <Input name="title" placeholder="Event Title" value={formData.title} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
-                        <div className="flex gap-2">
-                            <Input name="date" type="date" value={formData.date} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
-                            <Input name="time" type="time" value={formData.time} onChange={handleInputChange} className="input-field" disabled={isPreviewingDescription}/>
+                        <h3 className="font-orbitron text-base sm:text-lg accent-text">{editingEvent ? 'Edit Event' : 'New Event'}</h3>
+                        <Input name="title" placeholder="Event Title" value={formData.title} onChange={handleInputChange} className="input-field text-sm sm:text-base" disabled={isPreviewingDescription}/>
+                        <div className="flex flex-col sm:flex-row gap-2">
+                            <Input name="date" type="date" value={formData.date} onChange={handleInputChange} className="input-field text-sm flex-1" disabled={isPreviewingDescription}/>
+                            <Input name="time" type="time" value={formData.time} onChange={handleInputChange} className="input-field text-sm flex-1" disabled={isPreviewingDescription}/>
                         </div>
                         <Select name="category" value={formData.category} onValueChange={handleCategoryChange} disabled={isPreviewingDescription}>
-                            <SelectTrigger className="input-field"><SelectValue placeholder="Category" /></SelectTrigger>
+                            <SelectTrigger className="input-field text-sm"><SelectValue placeholder="Category" /></SelectTrigger>
                             <SelectContent className="bg-widget-background border-border-main">
                                 {categories.map(cat => {
                                     return <SelectItem key={cat} value={cat}>{cat}</SelectItem>;
@@ -514,11 +527,11 @@ export function CalendarFullScreenView({
                                 </div>
                             </div>
                             {isPreviewingDescription ? (
-                                <div className="prose prose-sm dark:prose-invert max-w-none p-2 min-h-[60px] border border-dashed border-border-main rounded-md bg-background/50">
+                                <div className="prose prose-sm dark:prose-invert max-w-none p-2 min-h-[60px] border border-dashed border-border-main rounded-md bg-background/50 overflow-y-auto">
                                     <ReactMarkdown>{formData.description || "Nothing to preview..."}</ReactMarkdown>
                                 </div>
                             ) : (
-                                <Textarea id="event-description" name="description" placeholder="Details... (Markdown supported)" value={formData.description || ''} onChange={handleInputChange} className="input-field min-h-[60px]"/>
+                                <Textarea id="event-description" name="description" placeholder="Details... (Markdown supported)" value={formData.description || ''} onChange={handleInputChange} className="input-field min-h-[60px] text-sm"/>
                             )}
                         </div>
                         {!isPreviewingDescription &&
@@ -529,30 +542,30 @@ export function CalendarFullScreenView({
                             />
                         }
                         <div className="flex gap-2 pt-2">
-                            <Button onClick={handleSubmitEvent} className="flex-grow btn-primary" disabled={isPreviewingDescription}>{editingEvent ? 'Save Changes' : 'Add Event'}</Button>
-                            <Button variant="outline" onClick={resetForm} className="border-border-main text-muted-foreground hover:bg-background">Cancel</Button>
+                            <Button onClick={handleSubmitEvent} className="flex-grow btn-primary text-sm" disabled={isPreviewingDescription}>{editingEvent ? 'Save Changes' : 'Add Event'}</Button>
+                            <Button variant="outline" onClick={resetForm} className="border-border-main text-muted-foreground hover:bg-background text-sm">Cancel</Button>
                         </div>
                     </div>
                 )}
 
                 {!showEventForm && selectedDate && (
                     <div>
-                        <h3 className="font-orbitron text-lg accent-text mb-2">
-                            Events for: {format(selectedDate, 'MMM d, yyyy')}
+                        <h3 className="font-orbitron text-base sm:text-lg accent-text mb-2">
+                            Events: {format(selectedDate, 'MMM d, yyyy')}
                         </h3>
                         {eventsForSelectedDay.length > 0 ? (
                             <ul className="space-y-2">
                                 {eventsForSelectedDay.map((event, idx) => (
                                     <li key={`${event.id}-${idx}`} className="p-2.5 bg-input-bg/70 border border-border-main rounded-md">
                                         <div className="flex justify-between items-start">
-                                            <div>
-                                                <p className="font-semibold text-sm text-foreground">{event.title}</p>
-                                                <p className="text-xs text-muted-foreground">
+                                            <div className="flex-grow min-w-0"> {/* Ensure text truncates */}
+                                                <p className="font-semibold text-sm text-foreground truncate">{event.title}</p>
+                                                <p className="text-xs text-muted-foreground truncate">
                                                     {format(parseISO(event.date), 'p')} - {event.category}
                                                     {event.recurrenceRule && <Repeat className="w-3 h-3 inline ml-1.5 text-muted-foreground/70"/>}
                                                 </p>
                                             </div>
-                                            <div className="flex gap-1 shrink-0">
+                                            <div className="flex gap-1 shrink-0 ml-1">
                                                 <Button variant="ghost" size="icon" onClick={() => {
                                                     const originalEvent = events.find(e => e.id === event.id);
                                                     setEditingEvent(originalEvent || event);
@@ -561,7 +574,7 @@ export function CalendarFullScreenView({
                                             </div>
                                         </div>
                                         {event.description && (
-                                            <div className="prose prose-sm dark:prose-invert max-w-none mt-1 pt-1 border-t border-border-main/50 text-foreground">
+                                            <div className="prose prose-sm dark:prose-invert max-w-none mt-1 pt-1 border-t border-border-main/50 text-foreground overflow-hidden">
                                                <ReactMarkdown>{event.description}</ReactMarkdown>
                                             </div>
                                         )}
