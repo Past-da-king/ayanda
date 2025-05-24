@@ -1,38 +1,75 @@
-import { NextResponse } from 'next/server';
-import { Category } from '@/types';
+import { NextRequest, NextResponse } from 'next/server';
+import dbConnect from '@/lib/mongodb';
+import ProjectModel, { IProject } from '@/models/ProjectModel';
+import { getToken } from 'next-auth/jwt';
+import { Project } from '@/types';
+// import mongoose from 'mongoose'; // Removed unused import
 
-// For now, projects (categories) are hardcoded as per the initial setup.
-// This API route can be expanded later if dynamic project/category management is needed.
-// Currently, it will just return the predefined list.
-const initialProjectsData: { id: string, name: Category }[] = [
-    { id: 'proj_all', name: 'All Projects' }, // Added All Projects for completeness
-    { id: 'proj_personal', name: 'Personal Life' },
-    { id: 'proj_work', name: 'Work' },
-    { id: 'proj_learning', name: 'Studies' }
-];
+export async function GET(request: NextRequest) {
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = token.id as string;
 
-export async function GET() {
+  await dbConnect();
   try {
-    // In a real scenario, you might fetch these from a 'Categories' collection in MongoDB
-    const categories: Category[] = initialProjectsData.map(p => p.name);
-    return NextResponse.json(categories, { status: 200 });
+    const projects: IProject[] = await ProjectModel.find({ userId }).sort({ name: 1 });
+    const projectObjects: Project[] = projects.map(p => ({
+        id: p.id,
+        userId: p.userId,
+        name: p.name,
+        createdAt: p.createdAt?.toISOString(),
+        updatedAt: p.updatedAt?.toISOString(),
+    }));
+    return NextResponse.json(projectObjects, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error) {
-    console.error('Failed to fetch projects/categories:', error);
-    return NextResponse.json({ message: 'Failed to fetch projects/categories', error: (error as Error).message }, { status: 500 });
+    console.error('Failed to fetch projects:', error);
+    return NextResponse.json({ message: 'Failed to fetch projects', error: (error instanceof Error ? error.message : "An unknown error occurred") }, { status: 500 });
   }
 }
 
-// POST might be used to add a new category dynamically if needed.
-// For now, we'll assume categories are managed elsewhere or are static.
-/*
 export async function POST(request: NextRequest) {
-  // Example: Add a new category to a 'Categories' collection
-  // await dbConnect();
-  // const { name } = await request.json();
-  // const newCategory = new CategoryModel({ name });
-  // await newCategory.save();
-  // return NextResponse.json(newCategory, { status: 201 });
-  return NextResponse.json({ message: 'Project creation not implemented yet' }, { status:501});
-}
-*/
+  const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
+  if (!token || !token.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+  const userId = token.id as string;
 
+  await dbConnect();
+  try {
+    const { name } = await request.json();
+    if (!name || typeof name !== 'string' || name.trim().length === 0) {
+      return NextResponse.json({ message: 'Project name is required.' }, { status: 400 });
+    }
+    if (name.toLowerCase() === "all projects") {
+        return NextResponse.json({ message: '"All Projects" is a reserved name and cannot be used.' }, { status: 400 });
+    }
+
+
+    const newProjectDoc: IProject = new ProjectModel({
+      userId: userId,
+      name: name.trim(),
+    });
+    
+    await newProjectDoc.save();
+    
+    const newProject: Project = {
+        id: newProjectDoc.id,
+        userId: newProjectDoc.userId,
+        name: newProjectDoc.name,
+        createdAt: newProjectDoc.createdAt?.toISOString(),
+        updatedAt: newProjectDoc.updatedAt?.toISOString(),
+    };
+
+    return NextResponse.json(newProject, { status: 201 });
+  } catch (error: unknown) {
+    console.error('Failed to create project:', error);
+    // Type guard for MongoDB duplicate key error
+    if (typeof error === 'object' && error !== null && 'code' in error && (error as { code: unknown }).code === 11000 && 'keyValue' in error) {
+        const keyValue = (error as { keyValue: Record<string, string> }).keyValue;
+        return NextResponse.json({ message: `A project with the name "${keyValue?.name}" already exists.` }, { status: 409 });
+    }
+    return NextResponse.json({ message: 'Failed to create project', error: (error instanceof Error ? error.message : "An unknown error occurred") }, { status: 500 });
+  }
+}

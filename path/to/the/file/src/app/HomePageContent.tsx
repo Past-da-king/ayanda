@@ -5,7 +5,7 @@ import { useSession } from 'next-auth/react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'; 
 
 import { Header } from '@/components/layout/Header';
-// ProjectSelectorBar import removed
+// import { ProjectSelectorBar } from '@/components/layout/ProjectSelectorBar'; // Removed: No longer used
 import { FooterChat } from '@/components/layout/FooterChat';
 import { AiAssistantWidget, ExecutedOperationInfo, AiChatMessage as AiChatMessageImport } from '@/components/dashboard/AiAssistantWidget';
 import { TasksWidget } from '@/components/dashboard/TasksWidget';

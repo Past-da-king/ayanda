@@ -1,4 +1,6 @@
 @import "tailwindcss";
+
+
 @theme inline {
   --color-background: var(--background);
   /* Shadcn/ui compatibility - Aliases pointing to AYANDA source variables */

@@ -16,16 +16,25 @@ export async function PUT(request: NextRequest, { params: paramsPromise }: { par
   const userIdAuth = token.id as string;
 
   await dbConnect();
-  const params = await paramsPromise; // Await the promise
+  const params = await paramsPromise; 
   const { id } = params;
 
   try {
-    const body: Partial<Omit<Goal, 'id' | 'userId'>> = await request.json();
-    const updatedGoal = await GoalModel.findOneAndUpdate({ id: id, userId: userIdAuth }, body, { new: true, runValidators: true });
+    // currentValue update is removed from here as it's calculated
+    const body: Partial<Omit<Goal, 'id' | 'userId' | 'currentValue'>> = await request.json();
+    
+    const updatedGoal = await GoalModel.findOneAndUpdate(
+        { id: id, userId: userIdAuth }, 
+        { $set: body }, // Use $set to only update provided fields
+        { new: true, runValidators: true }
+    );
+
     if (!updatedGoal) {
       return NextResponse.json({ message: 'Goal not found or you do not have permission to update it.' }, { status: 404 });
     }
-    return NextResponse.json(updatedGoal, { status: 200 });
+    // The returned goal won't have currentValue calculated here.
+    // Client should refetch if an immediate display of calculated progress is needed after update.
+    return NextResponse.json(updatedGoal.toObject(), { status: 200 });
   } catch (error) {
     console.error(`Failed to update goal ${id}:`, error);
     return NextResponse.json({ message: `Failed to update goal ${id}`, error: (error as Error).message }, { status: 500 });
@@ -40,7 +49,7 @@ export async function DELETE(request: NextRequest, { params: paramsPromise }: { 
   const userIdAuth = token.id as string;
 
   await dbConnect();
-  const params = await paramsPromise; // Await the promise
+  const params = await paramsPromise; 
   const { id } = params;
 
   try {
@@ -48,12 +57,15 @@ export async function DELETE(request: NextRequest, { params: paramsPromise }: { 
     if (!deletedGoal) {
       return NextResponse.json({ message: 'Goal not found or you do not have permission to delete it.' }, { status: 404 });
     }
+    // Also consider deleting linked tasks or unlinking them
+    // For now, tasks will remain but won't contribute to a non-existent goal
     return NextResponse.json({ message: 'Goal deleted successfully' }, { status: 200 });
   } catch (error) {
     console.error(`Failed to delete goal ${id}:`, error);
     return NextResponse.json({ message: `Failed to delete goal ${id}`, error: (error as Error).message }, { status: 500 });
   }
 }
+
 
 
 

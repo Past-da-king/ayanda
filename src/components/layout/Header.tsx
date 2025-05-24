@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react'; // Removed useCallback as fetchUserProfile moved
-import { LogIn, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote, UserCircle } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react'; 
+import { LogIn, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote, UserCircle, ChevronDown, Cog } from 'lucide-react'; // Added ChevronDown, Cog
 import { AyandaLogoIcon } from './AyandaLogoIcon';
 import { cn } from '@/lib/utils';
-import { useSession } from 'next-auth/react'; // signOut is no longer called directly here
+import { useSession } from 'next-auth/react'; 
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,8 +14,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { ThemeCustomizer } from './ThemeCustomizer';
-// ProfileCard is removed
-import { SearchResultItem } from '@/types'; 
+import { SearchResultItem, Project, Category } from '@/types'; 
 import { usePathname, useRouter } from 'next/navigation';
 
 const getIconForType = (type: SearchResultItem['type']) => {
@@ -28,9 +27,21 @@ const getIconForType = (type: SearchResultItem['type']) => {
   }
 };
 
-// Removed UserProfileState and related logic from Header
+interface HeaderProps {
+  // Props for Project Selector functionality, if it's integrated here
+  currentProjectName?: Category;
+  onProjectChange?: (projectName: Category) => void;
+  availableProjects?: Project[];
+  onManageProjects?: () => void;
+}
 
-export function Header() {
+
+export function Header({
+  currentProjectName,
+  onProjectChange,
+  availableProjects = [],
+  onManageProjects
+}: HeaderProps) {
   const { data: session, status } = useSession();
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
@@ -39,10 +50,15 @@ export function Header() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const searchPopoverRef = useRef<HTMLDivElement>(null);
 
+  // State for Project Dropdown
+  const [isProjectDropdownOpen, setIsProjectDropdownOpen] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const projectPillRef = useRef<HTMLDivElement>(null);
+
+
   const currentPathname = usePathname();
   const router = useRouter();
 
-  // Profile popover state and fetch logic removed from here
 
   const handleSearch = async (query: string) => {
     if (query.trim().length < 2) {
@@ -88,6 +104,12 @@ export function Header() {
       ) {
         setIsSearchPopoverOpen(false);
       }
+      if (
+        projectDropdownRef.current && !projectDropdownRef.current.contains(event.target as Node) &&
+        projectPillRef.current && !projectPillRef.current.contains(event.target as Node)
+      ) {
+        setIsProjectDropdownOpen(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -103,6 +125,8 @@ export function Header() {
   };
 
   const showSearch = status === "authenticated" && !["/login", "/register", "/landing", "/profile"].includes(currentPathname);
+  const showProjectSelector = status === "authenticated" && onProjectChange && currentProjectName && availableProjects && !["/login", "/register", "/landing", "/profile"].includes(currentPathname);
+  const allProjectsOption: Category = "All Projects";
 
 
   return (
@@ -115,11 +139,85 @@ export function Header() {
       )}
       style={{ height: '5rem' }}
     >
-      <Link href={session ? "/" : "/landing"} className="flex items-center space-x-3 cursor-pointer group">
-        <AyandaLogoIcon className="group-hover:scale-110 transition-transform duration-200" />
-        <h1 className="font-orbitron text-3xl font-bold tracking-wider accent-text group-hover:brightness-110 transition-all duration-200">AYANDA</h1>
-      </Link>
+      <div className="flex items-center space-x-3">
+        <Link href={session ? "/" : "/landing"} className="flex items-center space-x-3 cursor-pointer group">
+            <AyandaLogoIcon className="group-hover:scale-110 transition-transform duration-200" />
+            <h1 className="font-orbitron text-3xl font-bold tracking-wider accent-text group-hover:brightness-110 transition-all duration-200">AYANDA</h1>
+        </Link>
+      </div>
       
+      {/* Project Selector in the middle */}
+      {showProjectSelector && (
+        <div className="flex-grow flex justify-center items-center">
+            <div className="relative">
+                <div
+                ref={projectPillRef}
+                onClick={() => setIsProjectDropdownOpen(!isProjectDropdownOpen)}
+                className={cn(
+                    "bg-widget-bg border border-border",
+                    "rounded-full px-4 py-1.5", // Slightly smaller padding for header
+                    "text-xs font-medium cursor-pointer text-foreground",
+                    "flex items-center min-w-[180px] max-w-[220px] justify-between", // Adjusted width
+                    "transition-colors duration-200 hover:border-primary hover:bg-accent"
+                )}
+                >
+                <span className="truncate">{currentProjectName}</span>
+                <ChevronDown className="w-3.5 h-3.5 text-muted-foreground ml-1 shrink-0" />
+                </div>
+
+                {isProjectDropdownOpen && (
+                <div
+                    ref={projectDropdownRef}
+                    className={cn(
+                    "absolute mt-2 bg-popover border border-border rounded-md",
+                    "w-[220px] max-h-[300px] overflow-y-auto text-popover-foreground",
+                    "shadow-[0_8px_25px_rgba(0,0,0,0.4)] z-[105]", // Higher z-index
+                    "transition-all duration-200 ease-out",
+                    isProjectDropdownOpen ? "opacity-100 visible translate-y-0" : "opacity-0 invisible -translate-y-2.5"
+                    )}
+                    style={{ top: 'calc(100% + 0.3rem)', left: '50%', transform: 'translateX(-50%)' }} 
+                >
+                    <div 
+                        className={cn(
+                            "px-3 py-2 cursor-pointer text-xs",
+                            currentProjectName === allProjectsOption 
+                            ? "bg-accent text-accent-foreground font-semibold" 
+                            : "hover:bg-accent hover:text-accent-foreground"
+                        )}
+                        onClick={() => { onProjectChange(allProjectsOption); setIsProjectDropdownOpen(false); }}
+                    >
+                    {allProjectsOption}
+                    </div>
+                    {availableProjects.filter(p => p.name !== allProjectsOption).map(proj => (
+                    <div
+                        key={proj.id}
+                        className={cn(
+                        "px-3 py-2 cursor-pointer text-xs",
+                        currentProjectName === proj.name 
+                            ? "bg-accent text-accent-foreground font-semibold" 
+                            : "hover:bg-accent hover:text-accent-foreground"
+                        )}
+                        onClick={() => { onProjectChange(proj.name); setIsProjectDropdownOpen(false); }}
+                    >
+                        {proj.name}
+                    </div>
+                    ))}
+                </div>
+                )}
+            </div>
+            {onManageProjects && (
+                <button 
+                    title="Manage Projects" 
+                    onClick={onManageProjects}
+                    className="ml-2 p-1.5 rounded-full hover:bg-input-bg text-muted-foreground hover:text-accent-foreground"
+                >
+                    <Cog className="w-4 h-4" />
+                </button>
+            )}
+        </div>
+      )}
+
+
       <div className="flex items-center gap-3">
         {showSearch && (
           <div className="relative">
@@ -179,7 +277,6 @@ export function Header() {
           <div className="w-9 h-9 bg-muted animate-pulse rounded-full"></div>
         ) : session?.user ? (
           <>
-            {/* Display name is removed here, can be shown on profile page */}
             <Popover>
               <PopoverTrigger asChild>
                 <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent-foreground" title="Customize Theme">
@@ -191,16 +288,15 @@ export function Header() {
               </PopoverContent>
             </Popover>
             
-            {/* Profile Link instead of Popover */}
-            <Link href="/profile" passHref legacyBehavior>
+            <Link href="/profile" passHref>
                  <Button
                   variant="ghost"
                   size="icon"
                   className="text-muted-foreground hover:text-accent-foreground rounded-full"
                   title="My Profile"
-                  asChild // Make button act as a child of Link for proper behavior
+                  // asChild // Removed asChild to make the Button itself the link target for consistent styling
                 >
-                  <a><UserCircle className="w-6 h-6" /></a>
+                  <UserCircle className="w-6 h-6" />
                 </Button>
             </Link>
           </>
@@ -216,9 +312,9 @@ export function Header() {
                 <ThemeCustomizer />
               </PopoverContent>
             </Popover>
-            <Link href="/login" legacyBehavior>
-              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent-foreground" title="Sign In">
-                <a><LogIn className="w-5 h-5" /></a>
+            <Link href="/login">
+              <Button variant="ghost" size="icon" className="text-muted-foreground hover:text-accent-foreground" title="Sign In" > 
+                <LogIn className="w-5 h-5" />
               </Button>
             </Link>
           </>
@@ -227,4 +323,6 @@ export function Header() {
     </header>
   );
 }
+
+
 

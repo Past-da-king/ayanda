@@ -2,7 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Send, Mic, Square, Loader2 } from 'lucide-react';
-import { Textarea } from "@/components/ui/textarea"; // Changed from Input to Textarea
+import { Textarea } from "@/components/ui/textarea"; 
 import { Button } from "@/components/ui/button";
 import { cn } from '@/lib/utils';
 
@@ -24,7 +24,7 @@ export function FooterChat({
   onChatInputChange
 }: FooterChatProps) {
   
-  const [localMessage, setLocalMessage] = useState(''); // For non-chat mode input
+  const [localMessage, setLocalMessage] = useState(''); 
   const [isRecording, setIsRecording] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -43,11 +43,10 @@ export function FooterChat({
     };
   }, []);
   
-  // Auto-resize textarea
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto'; // Reset height
-      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; // Set to scroll height
+      textareaRef.current.style.height = 'auto'; 
+      textareaRef.current.style.height = `${textareaRef.current.scrollHeight}px`; 
     }
   }, [inputValue]);
 
@@ -57,7 +56,7 @@ export function FooterChat({
     if (messageToSend) {
       onSendCommand(messageToSend);
       setInputValue('');
-       if (textareaRef.current) { // Reset height after send
+       if (textareaRef.current) { 
         textareaRef.current.style.height = 'auto';
       }
     }
@@ -130,33 +129,39 @@ export function FooterChat({
       className={cn(
         "fixed bottom-6 left-1/2 -translate-x-1/2 z-[98]",
         "w-[clamp(300px,60%,700px)]", 
-        "bg-[rgba(20,20,20,0.9)] backdrop-blur-md",
-        "border border-[var(--border-color-val)] rounded-full", // Keep rounded-full for overall shape
-        "pl-5 pr-2 py-2",
+        "bg-[rgba(20,20,20,0.9)] backdrop-blur-md", // This background is always dark
+        "border border-[var(--border-color-val)] rounded-full", 
+        "pr-2 py-2", // pl is now handled by pl-[53px]
         "shadow-[0_10px_30px_rgba(0,0,0,0.5)]",
-        "flex items-end gap-2" // items-end for button alignment with growing textarea
+        // Applying user's CSS via Tailwind:
+        // display: flex -> flex
+        // flex-direction: row -> flex-row (default for flex, explicit for clarity)
+        // align-items: center -> items-center
+        // align-content: center -> content-center (usually for multi-line flex containers)
+        // padding-left: 53px -> pl-[53px]
+        "flex flex-row items-center content-center gap-2 pl-[53px]" 
       )}
     >
       {recordingError && <p className="text-xs text-destructive px-2 flex-grow text-center self-center">{recordingError}</p>}
       {!isRecording && (
         <Textarea
           ref={textareaRef}
-          rows={1} // Start with 1 row
+          rows={1} 
           value={inputValue}
           onChange={(e) => setInputValue(e.target.value)}
           placeholder={placeholderText}
           className={cn(
             "flex-grow bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0",
-            "text-[var(--text-color-val)] text-[0.925rem] placeholder:text-[var(--text-muted-color-val)]",
-            "resize-none overflow-y-auto py-2 px-0 leading-tight max-h-[120px]", // Max height for textarea
-            "custom-scrollbar-footerchat" // Specific scrollbar for this textarea if needed
+            "text-neutral-100 text-[0.925rem] placeholder:text-neutral-400", // Fixed light text and placeholder colors
+            "resize-none overflow-y-auto py-2 px-0 leading-tight max-h-[120px]", 
+            "custom-scrollbar-footerchat" 
           )}
           onKeyDown={handleKeyDown}
           disabled={isProcessingAi || isRecording}
         />
       )}
       {isRecording && (
-        <div className="flex-grow flex items-center justify-center h-10"> {/* Match button height */}
+        <div className="flex-grow flex items-center justify-center h-10"> 
           <span className="text-sm text-[var(--accent-color-val)] animate-pulse">Recording... Click mic to stop.</span>
         </div>
       )}
@@ -165,8 +170,8 @@ export function FooterChat({
         size="icon"
         onClick={handleMicClick} 
         className={cn(
-          isRecording ? "bg-destructive text-white hover:bg-destructive/90" : "bg-transparent text-[var(--text-muted-color-val)] hover:text-[var(--accent-color-val)]",
-          "rounded-full w-10 h-10",
+          isRecording ? "bg-destructive text-white hover:bg-destructive/90" : "bg-transparent text-neutral-300 hover:text-[var(--accent-color-val)]", // Text color for mic icon
+          "rounded-full w-10 h-10", // Fixed size for buttons
           "flex items-center justify-center shrink-0"
         )}
         disabled={isProcessingAi && !isRecording} 
@@ -180,8 +185,8 @@ export function FooterChat({
           size="icon"
           onClick={handleTextSend} 
           className={cn(
-            "bg-[var(--accent-color-val)] text-[var(--background-color-val)] hover:bg-[#00B8D4]",
-            "rounded-full w-10 h-10",
+            "bg-[var(--accent-color-val)] text-[var(--background-color-val)] hover:bg-[#00B8D4]", // Send button uses accent
+            "rounded-full w-10 h-10", // Fixed size for buttons
             "flex items-center justify-center shrink-0"
           )}
           disabled={!inputValue.trim() || isProcessingAi || isRecording}

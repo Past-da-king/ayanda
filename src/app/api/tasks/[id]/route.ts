@@ -10,6 +10,15 @@ interface Params {
   id: string;
 }
 
+type TaskUpdatePayload = Partial<Omit<Task, 'id' | 'userId'>> & {
+    subTasks?: Partial<SubTask>[];
+    recurrenceRule?: RecurrenceRule | null;
+    linkedGoalId?: string | null;
+    contributionValue?: number | null;
+    $unset?: { [key: string]: string }; // For Mongoose $unset operator
+};
+
+
 export async function PUT(request: NextRequest, { params: paramsPromise }: { params: Promise<Params> }) {
   const token = await getToken({ req: request, secret: process.env.NEXTAUTH_SECRET });
   if (!token || !token.id) {
@@ -18,41 +27,84 @@ export async function PUT(request: NextRequest, { params: paramsPromise }: { par
   const userIdAuth = token.id as string;
 
   await dbConnect();
-  const params = await paramsPromise; // Await the promise
+  const params = await paramsPromise;
   const { id } = params;
 
   try {
-    const body: Partial<Omit<Task, 'id' | 'userId'>> & { subTasks?: Partial<SubTask>[], recurrenceRule?: RecurrenceRule | null } = await request.json();
+    const body: Partial<Omit<Task, 'id' | 'userId'>> & {
+        subTasks?: Partial<SubTask>[],
+        recurrenceRule?: RecurrenceRule | null,
+        linkedGoalId?: string | null;
+        contributionValue?: number | null;
+    } = await request.json();
 
-    const updatePayload: Partial<Omit<Task, 'id' | 'userId'>> & { $unset?: { [key: string]: string } } = { ...body };
-    
-    // Ensure subtasks have IDs and default completion status if not provided
+    const updatePayload: TaskUpdatePayload = { ...body };
+
     if (body.subTasks) {
       updatePayload.subTasks = body.subTasks.map(sub => ({
         id: sub.id || uuidv4(),
         text: sub.text || '',
         completed: sub.completed || false,
-      })).filter(st => st.text.trim() !== ''); // Filter out empty subtasks
+      })).filter(st => st.text.trim() !== '');
     }
-    
+
     if (body.hasOwnProperty('recurrenceRule') && body.recurrenceRule === null) {
-        updatePayload.$unset = { recurrenceRule: "" }; // To remove the field from MongoDB doc
+        if (!updatePayload.$unset) updatePayload.$unset = {};
+        updatePayload.$unset.recurrenceRule = "";
         delete updatePayload.recurrenceRule;
     } else if (body.recurrenceRule) {
         updatePayload.recurrenceRule = body.recurrenceRule;
     }
 
-    // Handle case where subTasks might be explicitly set to null or empty array to clear them
+    if (body.hasOwnProperty('linkedGoalId') && body.linkedGoalId === null) {
+        if (!updatePayload.$unset) updatePayload.$unset = {};
+        updatePayload.$unset.linkedGoalId = "";
+        delete updatePayload.linkedGoalId;
+    } else if (body.linkedGoalId) {
+        updatePayload.linkedGoalId = body.linkedGoalId;
+    }
+
+    if (body.hasOwnProperty('contributionValue') && body.contributionValue === null) {
+        if (!updatePayload.$unset) updatePayload.$unset = {};
+        updatePayload.$unset.contributionValue = "";
+        delete updatePayload.contributionValue;
+    } else if (body.contributionValue !== undefined) {
+        updatePayload.contributionValue = body.contributionValue;
+    }
+
+
     if (body.hasOwnProperty('subTasks') && (body.subTasks === null || (Array.isArray(body.subTasks) && body.subTasks.length === 0))) {
       updatePayload.subTasks = [];
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const updateOperation: any = {};
+    if (Object.keys(updatePayload).some(key => key !== '$unset')) {
+        updateOperation.$set = {};
+        for (const key in updatePayload) {
+            if (key !== '$unset' && key !== 'subTasks') { 
+                (updateOperation.$set as Record<string, unknown>)[key] = updatePayload[key as keyof typeof updatePayload];
+            } else if (key === 'subTasks' && updatePayload.subTasks !== undefined) {
+                 (updateOperation.$set as Record<string, unknown>)[key] = updatePayload.subTasks;
+            }
+        }
+        if(Object.keys(updateOperation.$set).length === 0) delete updateOperation.$set;
+    }
+    if (updatePayload.$unset) {
+        updateOperation.$unset = updatePayload.$unset;
+    }
 
-    const updatedTask = await TaskModel.findOneAndUpdate({ id: id, userId: userIdAuth }, updatePayload, { new: true, runValidators: true });
+
+    const updatedTask = await TaskModel.findOneAndUpdate(
+        { id: id, userId: userIdAuth },
+        updateOperation,
+        { new: true, runValidators: true }
+    );
+
     if (!updatedTask) {
       return NextResponse.json({ message: 'Task not found or you do not have permission to update it.' }, { status: 404 });
     }
-    return NextResponse.json(updatedTask, { status: 200 });
+    return NextResponse.json(updatedTask.toObject(), { status: 200 });
   } catch (error) {
     console.error(`Failed to update task ${id}:`, error);
     if (error instanceof mongoose.Error.ValidationError) {
@@ -70,7 +122,7 @@ export async function DELETE(request: NextRequest, { params: paramsPromise }: { 
   const userIdAuth = token.id as string;
 
   await dbConnect();
-  const params = await paramsPromise; // Await the promise
+  const params = await paramsPromise;
   const { id } = params;
 
   try {
@@ -84,7 +136,3 @@ export async function DELETE(request: NextRequest, { params: paramsPromise }: { 
     return NextResponse.json({ message: `Failed to delete task ${id}`, error: (error as Error).message }, { status: 500 });
   }
 }
-
-
-
-

@@ -22,31 +22,33 @@ export interface Task {
   text: string;
   completed: boolean;
   dueDate?: string; // YYYY-MM-DD format (start date for recurring)
-  category: string;
+  category: string; // This will now be Project['name']
   recurrenceRule?: RecurrenceRule;
   subTasks?: SubTask[];
   createdAt?: string; // Mongoose adds this as Date, will be string in JSON
+  linkedGoalId?: string; // ID of the Goal this task contributes to
+  contributionValue?: number; // How much this task contributes to the linked goal
 }
 
 export interface Goal {
   id: string;
   userId: string;
   name: string;
-  currentValue: number;
   targetValue: number;
   unit: string;
-  category: string;
-  createdAt?: string; // Added for consistency if needed for sorting
+  category: string; // This will now be Project['name']
+  createdAt?: string; 
+  currentValue?: number; // Transient property for calculated value
 }
 
 export interface Note {
   id: string;
   userId: string;
   title?: string;
-  content: string; // Will store Markdown content
-  category: string;
-  lastEdited: string; // ISO string (Mongoose 'updatedAt' can serve this role too)
-  createdAt?: string; // Added for consistency
+  content: string; 
+  category: string; // This will now be Project['name']
+  lastEdited: string; // ISO string 
+  createdAt?: string; 
 }
 
 export interface Event {
@@ -56,33 +58,46 @@ export interface Event {
   date: string; // ISO string for the event's date and time
   duration?: number; // in minutes
   description?: string;
-  category: string;
+  category: string; // This will now be Project['name']
   recurrenceRule?: RecurrenceRule;
-  createdAt?: string; // Added for consistency
+  createdAt?: string; 
+}
+
+// New Project Interface
+export interface Project {
+  id: string;
+  userId: string;
+  name: string; // This is what was previously Category string
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 
 export type ViewMode = "dashboard" | "tasks" | "goals" | "notes" | "calendar";
 
-export type Category = "All Projects" | "Personal Life" | "Work" | "Studies";
+// Category will now refer to Project['name'], but the type alias can remain for convenience
+// if used extensively, or be replaced by Project['name'] directly.
+// For now, keeping it simple, existing components use 'string' for category.
+export type Category = string; 
 
-// For NextAuth session and JWT
+
 export interface AuthenticatedUser extends NextAuthUser {
   id: string;
   email: string;
   name?: string | null;
 }
 
-// For Global Search Results
 export interface SearchResultItem {
   id: string;
   type: 'task' | 'goal' | 'note' | 'event';
   title: string;
-  category: Category;
+  category: Category; // Project name
   date?: string;
   contentPreview?: string;
   path: string;
 }
+
+
 
 
 

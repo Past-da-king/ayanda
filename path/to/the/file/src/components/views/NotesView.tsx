@@ -7,19 +7,19 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { X, Save, PlusCircle, Edit2, Trash2 } from 'lucide-react'; 
-// cn import removed as it's unused
+// import { cn } from '@/lib/utils'; // Removed unused import
 import { format } from 'date-fns';
 
 interface NotesViewProps {
   notes: Note[]; 
   noteToEdit?: Note; 
-  categories: Category[]; 
-  currentCategory: Category; 
+  categories: Category[]; // These are project names
+  currentCategory: Category; // Current active project name
   onAddNote: (title: string | undefined, content: string, category: Category) => void;
   onUpdateNote: (noteId: string, title: string | undefined, content: string, category: Category) => void; 
   onDeleteNote: (noteId: string) => void; 
   onClose: () => void; 
-  // navigateToNotesView prop removed from interface
+  // navigateToNotesView prop removed
 }
 
 export function NotesView({ 
@@ -70,7 +70,7 @@ export function NotesView({
          setInternalViewMode('list');
       }
     }
-  }, [noteToEdit, actualCategories, internalViewMode, currentEditingNoteId, resetEditorFields]); // Added missing dependencies
+  }, [noteToEdit, actualCategories, internalViewMode, currentEditingNoteId, resetEditorFields]);
 
   const handleSaveNote = () => {
     if (editorContent.trim() || editorTitle.trim()) { 
