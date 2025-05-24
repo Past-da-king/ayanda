@@ -370,7 +370,7 @@ Each new log entry **must begin with its timestamp on a dedicated line**, follow
 
     const systemInstructionText = promptForSummary; // The detailed prompt is now the system instruction
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
     const request: GenerateContentRequest = {
         // Pass only the new chat history here, existing summary is in the system prompt
