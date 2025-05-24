@@ -3,7 +3,7 @@
 
 @theme inline {
   --color-background: var(--background);
-  /* Shadcn/ui compatibility - Aliases pointing to AYANDA source variables */
+  /* Shadcn/ui compatibility - Aliases pointing to AIDA source variables */
   /* These tell Tailwind how to interpret its own utility classes like bg-popover */
   --background: var(--background-color-val);
   --foreground: var(--text-color-val);
@@ -45,7 +45,7 @@
   --color-primary: var(--primary);
 
 
-  /* AYANDA source variables - DECLARE them for Tailwind's awareness. */
+  /* AIDA source variables - DECLARE them for Tailwind's awareness. */
   /* Actual default values are in :root. JS will override :root values. */
   /* Declaring them here (even empty) helps Tailwind's JIT and theme() function. */
   --accent-color-val: ;
@@ -73,7 +73,7 @@
 
 /* Default values set on :root. ThemeProvider will override these dynamically. */
 :root {
-  /* AYANDA source variables */
+  /* AIDA source variables */
   --accent-color-val: #00DCFF; /* Default Cyan */
   --accent-color-hsl: 190 100% 50%; 
   --primary-foreground-val: #0A0F14; /* Default: Dark text for light primary (like Default Cyan's primary button) */
@@ -146,7 +146,7 @@
 
 @layer components {
   .widget-item {
-    background-color: var(--input-bg-val); /* Uses AYANDA source variable */
+    background-color: var(--input-bg-val); /* Uses AIDA source variable */
     padding: 0.625rem 0.875rem; 
     border-radius: 0.375rem; 
     font-size: 0.875rem; 

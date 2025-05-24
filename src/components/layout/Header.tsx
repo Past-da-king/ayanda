@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'; 
 import { LogIn, PaletteIcon, Search as SearchIcon, X as XIcon, CalendarIcon, ListChecks, Target, StickyNote, UserCircle, ChevronDown, Cog } from 'lucide-react'; // Added ChevronDown, Cog
-import { AyandaLogoIcon } from './AyandaLogoIcon';
+import { AIDALogoIcon } from './AIDALogoIcon';
 import { cn } from '@/lib/utils';
 import { useSession } from 'next-auth/react'; 
 import Link from 'next/link';
@@ -141,8 +141,8 @@ export function Header({
     >
       <div className="flex items-center space-x-3">
         <Link href={session ? "/" : "/landing"} className="flex items-center space-x-3 cursor-pointer group">
-            <AyandaLogoIcon className="group-hover:scale-110 transition-transform duration-200" />
-            <h1 className="font-orbitron text-3xl font-bold tracking-wider accent-text group-hover:brightness-110 transition-all duration-200">AYANDA</h1>
+            <AIDALogoIcon className="group-hover:scale-110 transition-transform duration-200" />
+            <h1 className="font-orbitron text-3xl font-bold tracking-wider accent-text group-hover:brightness-110 transition-all duration-200">AIDA</h1>
         </Link>
       </div>
       

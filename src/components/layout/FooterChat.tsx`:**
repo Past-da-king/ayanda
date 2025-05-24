@@ -36,7 +36,7 @@ export function FooterChat({ onSendCommand }: FooterChatProps) { // Destructure 
         type="text"
         value={message}
         onChange={(e) => setMessage(e.target.value)}
-        placeholder="AYANDA, what can I help you with?"
+        placeholder="AIDA, what can I help you with?"
         className={cn(
           "flex-grow bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0",
           "text-[var(--text-color-val)] text-[0.925rem] placeholder:text-[var(--text-muted-color-val)]"

@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { AyandaLogoIcon } from '@/components/layout/AyandaLogoIcon';
+import { AIDALogoIcon } from '@/components/layout/AIDALogoIcon';
 import { v4 as uuidv4 } from 'uuid';
 
 export default function RegisterPage() {
@@ -66,14 +66,14 @@ export default function RegisterPage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-[var(--background-color-val)] p-4">
       <Link href="/landing" className="flex items-center space-x-3 mb-8 cursor-pointer group">
-        <AyandaLogoIcon className="group-hover:scale-110 transition-transform duration-200" />
-        <h1 className="font-orbitron text-4xl font-bold tracking-wider accent-text group-hover:brightness-110 transition-all duration-200">AYANDA</h1>
+        <AIDALogoIcon className="group-hover:scale-110 transition-transform duration-200" />
+        <h1 className="font-orbitron text-4xl font-bold tracking-wider accent-text group-hover:brightness-110 transition-all duration-200">AIDA</h1>
       </Link>
       <Card className="w-full max-w-md bg-[var(--widget-background-val)] border-[var(--border-color-val)] shadow-2xl">
         <CardHeader className="items-center text-center">
           <CardTitle className="font-orbitron text-2xl accent-text">Create Account</CardTitle>
           <CardDescription className="text-[var(--text-muted-color-val)]">
-            Join AYANDA to organize your life.
+            Join AIDA to organize your life.
           </CardDescription>
         </CardHeader>
         <CardContent>

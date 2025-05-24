@@ -21,9 +21,9 @@ interface ThemeContextType extends ThemeContextState {
   toggleMode: () => void;
 }
 
-const LS_THEME_KEY = 'ayanda-theme-key';
-const LS_FONT_KEY = 'ayanda-font-key';
-const LS_MODE_KEY = 'ayanda-theme-mode';
+const LS_THEME_KEY = 'AIDA-theme-key';
+const LS_FONT_KEY = 'AIDA-font-key';
+const LS_MODE_KEY = 'AIDA-theme-mode';
 
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 

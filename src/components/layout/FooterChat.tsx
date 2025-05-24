@@ -122,7 +122,7 @@ export function FooterChat({
     }
   };
 
-  const placeholderText = isAiChatModeActive ? "Message AIDA... (Shift+Enter for new line)" : "AYANDA, what can I help you with?";
+  const placeholderText = isAiChatModeActive ? "\n Message AIDA... (Shift+Enter for new line)" : " \n AIDA, what can I help you with?";
 
   return (
     <div 

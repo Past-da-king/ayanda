@@ -15,7 +15,7 @@ import {
 } from '@/lib/fonts';
 
 export const metadata: Metadata = {
-  title: "AYANDA",
+  title: "AIDA",
   description: "Your personal assistant and dashboard.",
 };
 

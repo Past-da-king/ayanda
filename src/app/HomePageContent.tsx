@@ -662,7 +662,7 @@ export default function HomePageContent() {
         <div className="flex flex-col min-h-screen h-screen max-h-screen overflow-hidden">
             <Header />
             <main className="flex-grow px-6 pb-24 pt-[calc(5rem+1rem)] flex justify-center items-center"> 
-                <p className="text-xl accent-text">Initializing AYANDA...</p>
+                <p className="text-xl accent-text">Initializing AIDA...</p>
             </main>
         </div>
     );

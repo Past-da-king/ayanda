@@ -41,10 +41,10 @@ export function FeaturesSection() {
     <section id="features" className="py-16 md:py-24 bg-[var(--widget-background-val)]">
       <div className="container mx-auto px-6">
         <h2 className="font-orbitron text-3xl md:text-4xl font-bold text-center mb-4">
-          Why <span className="accent-text">AYANDA</span>?
+          Why <span className="accent-text">AIDA</span>?
         </h2>
         <p className="text-lg text-[var(--text-muted-color-val)] text-center mb-12 md:mb-16 max-w-2xl mx-auto">
-          AYANDA brings clarity and control to your busy life. Focus on what matters most with our intuitive and powerful features.
+          AIDA brings clarity and control to your busy life. Focus on what matters most with our intuitive and powerful features.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {features.map((feature, index) => (

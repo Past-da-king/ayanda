@@ -1,5 +1,5 @@
 export interface ColorSet {
-  // Base AYANDA variables (source of truth)
+  // Base AIDA variables (source of truth)
   accentColorVal: string;
   accentColorHsl: string; 
   primaryForegroundVal: string; // Text color for on primary/accent backgrounds
@@ -47,7 +47,7 @@ const toHslString = (hue: number, saturation: number, lightness: number) => `${h
 
 function createThemeColors(
     isDark: boolean,
-    // AYANDA source values
+    // AIDA source values
     accentHex: string, 
     accentHslParts: [number, number, number], 
     primaryFgHex: string, // Explicit foreground for primary
@@ -62,7 +62,7 @@ function createThemeColors(
     const accentHslStr = toHslString(...accentHslParts);
 
     return {
-        // AYANDA source variables
+        // AIDA source variables
         accentColorVal: accentHex,
         accentColorHsl: accentHslStr,
         primaryForegroundVal: primaryFgHex,
